@@ -747,7 +747,6 @@ def executar_gerador_escala(mes_s, ano_s):
         if fins_de_semana:
             model.Add(sum(fds_livre_var[(trabalhador, idx_fds)] for idx_fds in range(len(fins_de_semana))) >= 1)
 
-    # REGRA DE EQUIDADE DE HORAS AO FIM DE SEMANA
     horas_fds_var = {}
     for trabalhador in trabalhadores:
         expressao_fds = []
@@ -926,7 +925,6 @@ def executar_gerador_escala(mes_s, ano_s):
     if pares_responsabilidades_diferentes:
         objetivo.append(1_000 * sum(pares_responsabilidades_diferentes))
 
-    # Penalização forte para o desequilíbrio nas horas de fim de semana
     objetivo.append(-10_000 * desvio_hrs_fds)
 
     if penalizacoes_t_meio:
@@ -1030,7 +1028,7 @@ def executar_gerador_escala(mes_s, ano_s):
         return False
 
 
-tabs = st.tabs(["1. Gestão da Equipa", "2. Responsabilidades e Turnos", "3. Necessidades Mensais", "4. Indisponibilidades", "5. Gerar Escala"])
+tabs = st.tabs(["1. Gestão da Equipa", "2. Responsabilidades e Turnos", "3. Necessidades Mensais", "4. Indisponividades", "5. Gerar Escala"])
 
 # -----------------------------------------------------------------------------
 # TAB 1: GESTÃO DA EQUIPA
@@ -1284,14 +1282,24 @@ with tabs[4]:
         tabela_html = renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes_sel, ano_sel)
         st.markdown(tabela_html, unsafe_allow_html=True)
 
-        st.subheader("📊 Resumo de Horas e Banco de Horas da Equipa")
-        cols_met = st.columns(min(len(trabalhadores_escala), 5))
-        for idx_m, t_nome in enumerate(trabalhadores_escala[:5]):
-            saldo = banco_horas[t_nome]
-            s_str = f"+{saldo}h" if saldo > 0 else f"{saldo}h"
-            hrs_fds = horas_fds_realizadas.get(t_nome, 0.0)
-            cols_met[idx_m].metric(
-                label=t_nome,
-                value=f"{totais_horas_realizadas[t_nome]}h",
-                delta=f"FDS: {hrs_fds}h | Saldo: {s_str}"
-            )
+        # CÁLCULO DOS INDICADORES GLOBAIS DA EQUIPA
+        num_colabs = len(trabalhadores_escala)
+        if num_colabs > 0:
+            total_horas_equipa = sum(totais_horas_realizadas.values())
+            media_horas_colab = total_horas_equipa / num_colabs
+
+            total_horas_fds = sum(horas_fds_realizadas.values())
+            media_horas_fds = total_horas_fds / num_colabs
+
+            total_banco = sum(banco_horas.values())
+
+            st.subheader("📊 Indicadores Gerais da Equipa")
+            c_m1, c_m2, c_m3, c_m4, c_m5 = st.columns(5)
+            
+            c_m1.metric("Total Horas Equipa", f"{round(total_horas_equipa, 1)}h")
+            c_m2.metric("Média / Colaborador", f"{round(media_horas_colab, 1)}h")
+            c_m3.metric("Total Horas FDS", f"{round(total_horas_fds, 1)}h")
+            c_m4.metric("Média FDS / Colaborador", f"{round(media_horas_fds, 1)}h")
+            
+            delta_banco_str = f"+{round(total_banco, 1)}h" if total_banco > 0 else f"{round(total_banco, 1)}h"
+            c_m5.metric("Balanço Banco de Horas", f"{round(total_banco, 1)}h", delta=delta_banco_str)
