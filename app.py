@@ -5,11 +5,12 @@ import json
 import re
 from datetime import datetime
 
+import openpyxl
 import pandas as pd
 import streamlit as st
-import openpyxl
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+import streamlit.components.v1 as components
 from github import Github
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from ortools.sat.python import cp_model
 
 
@@ -283,41 +284,68 @@ def estilizar_fins_de_semana(df, mes, ano, dias_nas_colunas):
 
 
 def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
-    """Tabela final HTML padronizada com fins de semana destacados em tom dourado suave."""
-    html_code = """
+    """Tabela final HTML padronizada com CSS de impressão nativo (@media print)."""
+    html_code = f"""
     <style>
-        .escala-table-container {
+        @media print {{
+            @page {{
+                size: A4 landscape;
+                margin: 8mm;
+            }}
+            body * {{
+                visibility: hidden;
+            }}
+            .printable-area, .printable-area * {{
+                visibility: visible;
+            }}
+            .printable-area {{
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }}
+            .no-print {{
+                display: none !important;
+            }}
+            .escala-table {{
+                font-size: 0.75rem !important;
+            }}
+            .escala-table th, .escala-table td {{
+                padding: 4px 3px !important;
+            }}
+        }}
+        .escala-table-container {{
             overflow-x: auto;
             margin-top: 10px;
             margin-bottom: 25px;
-        }
-        .escala-table {
+        }}
+        .escala-table {{
             border-collapse: collapse;
             width: 100%;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             font-size: 0.88rem;
             text-align: center;
-        }
-        .escala-table th, .escala-table td {
+        }}
+        .escala-table th, .escala-table td {{
             border: 1px solid #e5e7eb;
             padding: 8px 6px;
             white-space: nowrap;
-        }
-        .escala-table th {
+        }}
+        .escala-table th {{
             background-color: #f9fafb;
             font-weight: 600;
             color: #374151;
-        }
-        .escala-table th.fds-header {
+        }}
+        .escala-table th.fds-header {{
             background-color: #fff7ed;
             border-bottom: 3px solid #f59e0b;
             color: #9a3412;
             font-weight: bold;
-        }
-        .escala-table td.fds-cell {
+        }}
+        .escala-table td.fds-cell {{
             background-color: #fffdfa;
-        }
-        .escala-table td.nome-col {
+        }}
+        .escala-table td.nome-col {{
             text-align: left;
             font-weight: 600;
             background-color: #f9fafb;
@@ -325,11 +353,14 @@ def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
             left: 0;
             z-index: 1;
             border-right: 2px solid #d1d5db;
-        }
-        .txt-f { color: #9ca3af; font-weight: normal; }
-        .txt-l { color: #d97706; font-weight: bold; }
-        .res-col { font-weight: 600; background-color: #f3f4f6; }
+        }}
+        .txt-f {{ color: #9ca3af; font-weight: normal; }}
+        .txt-l {{ color: #d97706; font-weight: bold; }}
+        .res-col {{ font-weight: 600; background-color: #f3f4f6; }}
     </style>
+
+    <div class="printable-area">
+    <h2 style="margin-bottom: 5px;">Escala de Trabalho Mensal - {calendar.month_name[mes]} / {ano}</h2>
     <div class="escala-table-container">
     <table class="escala-table">
         <thead>
@@ -375,7 +406,7 @@ def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
 
         html_code += "</tr>"
 
-    html_code += "tbody></table></div>"
+    html_code += "tbody></table></div></div>"
     return html_code
 
 
@@ -407,7 +438,7 @@ def gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes, ano):
     align_center = Alignment(horizontal="center", vertical="center")
     align_left = Alignment(horizontal="left", vertical="center")
 
-    # Write Headers
+    # Headers
     headers = ["Trabalhador"] + list(df_resultado.columns)
     ws.append(headers)
 
@@ -423,7 +454,7 @@ def gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes, ano):
         cell.alignment = align_center if col_idx > 1 else align_left
         cell.border = thin_border
 
-    # Write Data
+    # Data
     for row_idx, trab in enumerate(df_resultado.index, 2):
         ws.cell(row=row_idx, column=1, value=str(trab)).font = font_trab
         ws.cell(row=row_idx, column=1).alignment = align_left
@@ -455,7 +486,7 @@ def gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes, ano):
                 cell.fill = fill_totals
                 cell.font = font_totals
 
-    # Adjust Column Widths
+    # Widths
     for col in ws.columns:
         max_len = max(len(str(cell.value or '')) for cell in col)
         col_letter = openpyxl.utils.get_column_letter(col[0].column)
@@ -1027,6 +1058,33 @@ with tabs[4]:
                 df_resultado = pd.DataFrame.from_dict(dados_escala, orient="index", columns=todas_colunas)
                 df_meta_resps = pd.DataFrame.from_dict(dados_meta_resps, orient="index", columns=todas_colunas)
                 
+                # Botões de Impressão e Exportação
+                col_print, col_exp1, col_exp2 = st.columns([1, 1, 1])
+
+                # Botão de Impressão com acionamento JavaScript nativo
+                if col_print.button("🖨️ Imprimir / Guardar em PDF", use_container_width=True, type="primary"):
+                    components.html("<script>window.parent.print();</script>", height=0, width=0)
+
+                # Exportar Excel
+                excel_bytes = gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes_sel, ano_sel)
+                col_exp1.download_button(
+                    label="📊 Descarregar Excel (.xlsx)",
+                    data=excel_bytes,
+                    file_name=f"escala_{mes_sel}_{ano_sel}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+
+                # Exportar CSV
+                csv = df_resultado.to_csv().encode("utf-8")
+                col_exp2.download_button(
+                    label="📥 Descarregar CSV",
+                    data=csv,
+                    file_name=f"escala_{mes_sel}_{ano_sel}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
                 # Renderizar Legenda das Cores do Texto por Responsabilidade
                 st.markdown("### 🎨 Legenda dos Turnos por Setor")
                 legenda_html = "<div style='display:flex; gap:15px; flex-wrap:wrap; margin-bottom:15px;'>"
@@ -1045,29 +1103,5 @@ with tabs[4]:
                     saldo = banco_horas[t_nome]
                     s_str = f"+{saldo}h" if saldo > 0 else f"{saldo}h"
                     cols_met[idx_m].metric(label=t_nome, value=f"{totais_horas_realizadas[t_nome]}h", delta=s_str)
-
-                # Opções de Exportação
-                col_exp1, col_exp2 = st.columns(2)
-                
-                # Download em Excel (.xlsx)
-                excel_bytes = gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes_sel, ano_sel)
-                col_exp1.download_button(
-                    label="📊 Descarregar Escala Formatada (Excel .xlsx)",
-                    data=excel_bytes,
-                    file_name=f"escala_{mes_sel}_{ano_sel}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    type="primary"
-                )
-
-                # Download em CSV (.csv)
-                csv = df_resultado.to_csv().encode("utf-8")
-                col_exp2.download_button(
-                    label="📥 Descarregar Escala Simples (CSV)",
-                    data=csv,
-                    file_name=f"escala_{mes_sel}_{ano_sel}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
             else:
                 st.error("Não foi possível encontrar uma solução válida com as restrições impostas. Tente reduzir as necessidades mensais ou ajustar as folgas/férias solicitadas.")
