@@ -3,15 +3,13 @@
     "Fátima Silva",
     "Carina Alves",
     "Clarisse Castro",
-    "Maria Helena Cardoso",
-    "Luísa Apresentação"
+    "Maria Helena Cardoso"
   ],
   "trabalhadores_ativos": {
     "Fátima Silva": true,
     "Carina Alves": true,
     "Clarisse Castro": true,
-    "Maria Helena Cardoso": true,
-    "Luísa Apresentação": true
+    "Maria Helena Cardoso": true
   },
   "preferencias_jornadas_12h": {
     "Ana Silva": false,
@@ -41,8 +39,7 @@
     "Fátima Silva": 35.0,
     "Carina Alves": 35.0,
     "Clarisse Castro": 35.0,
-    "Maria Helena Cardoso": 35.0,
-    "Luísa Apresentação": 35.0
+    "Maria Helena Cardoso": 35.0
   },
   "competencias": {
     "Fátima Silva": {
@@ -110,30 +107,6 @@
         "T24"
       ],
       "Ecografia": [
-        "M75",
-        "M12",
-        "T24"
-      ]
-    },
-    "Luísa Apresentação": {
-      "Radiologia Convencional": [
-        "M3",
-        "T",
-        "M12",
-        "T24"
-      ],
-      "Tomografia Computorizada": [
-        "M3",
-        "T",
-        "M12",
-        "T24"
-      ],
-      "Ressonância Magnética": [
-        "M12",
-        "T24"
-      ],
-      "Ecografia": [
-        "M3",
         "M75",
         "M12",
         "T24"
@@ -760,7 +733,6 @@
   },
   "preferencias_turnos": {
     "index": [
-      "Daniel Rocha",
       "Fátima Silva",
       "Carina Alves",
       "Clarisse Castro",
@@ -800,38 +772,6 @@
       "30"
     ],
     "data": [
-      [
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        ""
-      ],
       [
         "",
         "",
