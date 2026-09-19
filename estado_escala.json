@@ -1,6 +1,5 @@
 {
   "trabalhadores": [
-    "Carla Costa",
     "Daniel Rocha",
     "Fátima Silva",
     "Carina Alves",
@@ -9,7 +8,6 @@
     "Luísa Apresentação"
   ],
   "trabalhadores_ativos": {
-    "Carla Costa": true,
     "Daniel Rocha": true,
     "Fátima Silva": true,
     "Carina Alves": true,
@@ -42,7 +40,6 @@
     "Luísa Apresentação": 2
   },
   "horas_contrato_semanal": {
-    "Carla Costa": 35.0,
     "Daniel Rocha": 35.0,
     "Fátima Silva": 35.0,
     "Carina Alves": 35.0,
@@ -51,30 +48,6 @@
     "Luísa Apresentação": 35.0
   },
   "competencias": {
-    "Carla Costa": {
-      "Radiologia Convencional": [
-        "M3",
-        "T",
-        "M12",
-        "T24"
-      ],
-      "Tomografia Computorizada": [
-        "M3",
-        "T",
-        "M12",
-        "T24"
-      ],
-      "Ressonância Magnética": [
-        "M12",
-        "T24"
-      ],
-      "Ecografia": [
-        "M3",
-        "M75",
-        "M12",
-        "T24"
-      ]
-    },
     "Daniel Rocha": {
       "Radiologia Convencional": [
         "M3",
@@ -814,7 +787,6 @@
   },
   "preferencias_turnos": {
     "index": [
-      "Bruno Santos",
       "Carla Costa",
       "Daniel Rocha",
       "Fátima Silva",
@@ -856,38 +828,6 @@
       "30"
     ],
     "data": [
-      [
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        ""
-      ],
       [
         "",
         "",
