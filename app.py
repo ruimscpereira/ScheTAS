@@ -449,7 +449,7 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
     
     # 1. Título Limpo do PDF
     nome_mes = calendar.month_name[mes].capitalize()
-    elements.append(Paragraph(f"Escala de Trabalho Mensal - {nome_mes} de {ano}", title_style))
+    elements.append(Paragraph(f"Escala de Trabalho Mensal TAS - {nome_mes} de {ano}", title_style))
     elements.append(Spacer(1, 5))
 
     # 2. Construir Matriz de Dados
