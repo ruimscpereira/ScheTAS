@@ -12,7 +12,6 @@ from github import Github
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from ortools.sat.python import cp_model
 
-# Importações para geração de PDF nativo
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
@@ -57,7 +56,7 @@ HORAS_DIA_FERIAS_LICENCA = 7.0
 st.set_page_config(page_title="Gestor de Escalas de Trabalho", layout="wide")
 
 # =============================================================================
-# PERSISTÊNCIA VIA GITHUB API
+# PERSISTÊNCIA VIA GITHUB API POR MÊS
 # =============================================================================
 def guardar_estado_no_github():
     if "GITHUB_TOKEN" not in st.secrets or "GITHUB_REPO" not in st.secrets:
@@ -68,21 +67,28 @@ def guardar_estado_no_github():
         repo = g.get_repo(st.secrets["GITHUB_REPO"])
         
         turnos_dict = st.session_state.turnos.to_dict(orient="records") if isinstance(st.session_state.turnos, pd.DataFrame) else []
-        df_nec_dict = st.session_state.df_necessidades.to_dict(orient="split") if isinstance(st.session_state.get("df_necessidades"), pd.DataFrame) else None
-        pref_dict = st.session_state.preferencias_turnos.to_dict(orient="split") if isinstance(st.session_state.get("preferencias_turnos"), pd.DataFrame) else None
 
-        # Guardar também a última escala gerada no GitHub
-        escala_gerada_dict = None
-        if "escala_gerada" in st.session_state and st.session_state.escala_gerada is not None:
-            eg = st.session_state.escala_gerada
-            escala_gerada_dict = {
-                "df_resultado": eg["df_resultado"].to_dict(orient="split"),
-                "df_meta_resps": eg["df_meta_resps"].to_dict(orient="split"),
-                "mes": eg["mes"],
-                "ano": eg["ano"],
-                "totais_horas_realizadas": eg["totais_horas_realizadas"],
-                "banco_horas": eg["banco_horas"],
-                "trabalhadores": eg["trabalhadores"]
+        # Serializar dicionário de meses (df_necessidades, preferencias_turnos, escala_gerada)
+        historico_meses_dict = {}
+        for chave_mes, dados_m in st.session_state.historico_meses.items():
+            df_nec_dict = dados_m["df_necessidades"].to_dict(orient="split") if isinstance(dados_m.get("df_necessidades"), pd.DataFrame) else None
+            pref_dict = dados_m["preferencias_turnos"].to_dict(orient="split") if isinstance(dados_m.get("preferencias_turnos"), pd.DataFrame) else None
+            
+            escala_dict = None
+            if dados_m.get("escala_gerada") is not None:
+                eg = dados_m["escala_gerada"]
+                escala_dict = {
+                    "df_resultado": eg["df_resultado"].to_dict(orient="split"),
+                    "df_meta_resps": eg["df_meta_resps"].to_dict(orient="split"),
+                    "totais_horas_realizadas": eg["totais_horas_realizadas"],
+                    "banco_horas": eg["banco_horas"],
+                    "trabalhadores": eg["trabalhadores"]
+                }
+            
+            historico_meses_dict[chave_mes] = {
+                "df_necessidades": df_nec_dict,
+                "preferencias_turnos": pref_dict,
+                "escala_gerada": escala_dict
             }
 
         dados = {
@@ -93,9 +99,7 @@ def guardar_estado_no_github():
             "horas_contrato_semanal": st.session_state.horas_contrato_semanal,
             "competencias": st.session_state.competencias,
             "turnos": turnos_dict,
-            "df_necessidades": df_nec_dict,
-            "preferencias_turnos": pref_dict,
-            "escala_gerada": escala_gerada_dict
+            "historico_meses": historico_meses_dict
         }
         
         conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
@@ -132,27 +136,31 @@ def carregar_estado_do_github():
         
         if dados.get("turnos"):
             st.session_state.turnos = pd.DataFrame(dados["turnos"])
-        if dados.get("df_necessidades"):
-            raw_nec = dados["df_necessidades"]
-            st.session_state.df_necessidades = pd.DataFrame(raw_nec["data"], index=raw_nec["index"], columns=raw_nec["columns"])
-        if dados.get("preferencias_turnos"):
-            raw_pref = dados["preferencias_turnos"]
-            st.session_state.preferencias_turnos = pd.DataFrame(raw_pref["data"], index=raw_pref["index"], columns=raw_pref["columns"])
-            
-        if dados.get("escala_gerada"):
-            eg = dados["escala_gerada"]
-            raw_res = eg["df_resultado"]
-            raw_meta = eg["df_meta_resps"]
-            st.session_state.escala_gerada = {
-                "df_resultado": pd.DataFrame(raw_res["data"], index=raw_res["index"], columns=raw_res["columns"]),
-                "df_meta_resps": pd.DataFrame(raw_meta["data"], index=raw_meta["index"], columns=raw_meta["columns"]),
-                "mes": eg["mes"],
-                "ano": eg["ano"],
-                "totais_horas_realizadas": eg["totais_horas_realizadas"],
-                "banco_horas": eg["banco_horas"],
-                "trabalhadores": eg["trabalhadores"]
-            }
 
+        # Desserializar histórico mensal
+        historico_carregado = {}
+        for chave_mes, dados_m in dados.get("historico_meses", {}).items():
+            df_nec = pd.DataFrame(dados_m["df_necessidades"]["data"], index=dados_m["df_necessidades"]["index"], columns=dados_m["df_necessidades"]["columns"]) if dados_m.get("df_necessidades") else None
+            df_pref = pd.DataFrame(dados_m["preferencias_turnos"]["data"], index=dados_m["preferencias_turnos"]["index"], columns=dados_m["preferencias_turnos"]["columns"]) if dados_m.get("preferencias_turnos") else None
+            
+            escala_g = None
+            if dados_m.get("escala_gerada"):
+                eg = dados_m["escala_gerada"]
+                escala_g = {
+                    "df_resultado": pd.DataFrame(eg["df_resultado"]["data"], index=eg["df_resultado"]["index"], columns=eg["df_resultado"]["columns"]),
+                    "df_meta_resps": pd.DataFrame(eg["df_meta_resps"]["data"], index=eg["df_meta_resps"]["index"], columns=eg["df_meta_resps"]["columns"]),
+                    "totais_horas_realizadas": eg["totais_horas_realizadas"],
+                    "banco_horas": eg["banco_horas"],
+                    "trabalhadores": eg["trabalhadores"]
+                }
+            
+            historico_carregado[chave_mes] = {
+                "df_necessidades": df_nec,
+                "preferencias_turnos": df_pref,
+                "escala_gerada": escala_g
+            }
+        
+        st.session_state.historico_meses = historico_carregado
         return True
     except Exception:
         return False
@@ -172,7 +180,7 @@ with st.sidebar:
             st.rerun()
 
 # =============================================================================
-# INICIALIZAÇÃO DE ESTADOS BASE
+# INICIALIZAÇÃO DE ESTADOS BASE E HISTÓRICO MENSAL
 # =============================================================================
 if "trabalhadores" not in st.session_state:
     st.session_state.trabalhadores = ["Ana Silva", "Bruno Santos", "Carla Costa", "Daniel Rocha", "Eduarda Lima"]
@@ -192,11 +200,34 @@ if "horas_contrato_semanal" not in st.session_state:
 if "turnos" not in st.session_state:
     st.session_state.turnos = pd.DataFrame(DEFAULT_TURNOS)
 
-if "escala_gerada" not in st.session_state:
-    st.session_state.escala_gerada = None
+if "historico_meses" not in st.session_state:
+    st.session_state.historico_meses = {}
 
 if "confirmar_substituicao" not in st.session_state:
     st.session_state.confirmar_substituicao = False
+
+
+# =============================================================================
+# SELETOR GLOBAL DE MÊS E ANO NO TOPO
+# =============================================================================
+st.title("🗓️ Gestor Inteligente de Escalas de Trabalho")
+
+col_g1, col_g2, col_g3 = st.columns([2, 2, 4])
+with col_g1:
+    mes_sel = st.selectbox("📅 Mês de Trabalho", list(range(1, 13)), index=datetime.now().month - 1, key="global_mes")
+with col_g2:
+    ano_sel = st.number_input("📆 Ano", min_value=2024, max_value=2030, value=datetime.now().year, key="global_ano")
+
+chave_mes_atual = f"{ano_sel}_{mes_sel:02d}"
+if chave_mes_atual not in st.session_state.historico_meses:
+    st.session_state.historico_meses[chave_mes_atual] = {
+        "df_necessidades": None,
+        "preferencias_turnos": None,
+        "escala_gerada": None
+    }
+
+dados_mes_atual = st.session_state.historico_meses[chave_mes_atual]
+num_dias = calendar.monthrange(ano_sel, mes_sel)[1]
 
 
 def normalizar_turnos(df):
@@ -257,9 +288,9 @@ def e_fim_de_semana(dia, mes, ano):
 
 
 def contar_dias_uteis_mes(mes, ano):
-    num_dias = calendar.monthrange(ano, mes)[1]
+    n_dias = calendar.monthrange(ano, mes)[1]
     dias_uteis = 0
-    for dia in range(1, num_dias + 1):
+    for dia in range(1, n_dias + 1):
         if not e_fim_de_semana(dia, mes, ano):
             dias_uteis += 1
     return dias_uteis
@@ -648,12 +679,12 @@ if "novo_trabalhador_form_version" not in st.session_state:
     st.session_state.novo_trabalhador_form_version = 0
 
 
-def executar_gerador_escala(mes_sel, ano_sel):
-    """Função principal para calcular e gerar a escala optimizada."""
+def executar_gerador_escala(mes_s, ano_s):
     trabalhadores = [nome for nome in st.session_state.trabalhadores if st.session_state.trabalhadores_ativos.get(nome, True)]
     turnos = normalizar_turnos(st.session_state.turnos)
-    df_nec = st.session_state.get("df_necessidades")
-    num_dias = calendar.monthrange(ano_sel, mes_sel)[1]
+    dados_m = st.session_state.historico_meses[f"{ano_s}_{mes_s:02d}"]
+    df_nec = dados_m.get("df_necessidades")
+    num_dias_m = calendar.monthrange(ano_s, mes_s)[1]
 
     if not st.session_state.trabalhadores or not trabalhadores:
         st.error("Adicione e ative trabalhadores antes de gerar a escala.")
@@ -664,38 +695,38 @@ def executar_gerador_escala(mes_sel, ano_sel):
 
     slots = turnos_ordenados(turnos)
     duracoes_slots = [calcular_duracao_turno_horas(s.Início, s.Fim) for s in slots]
-    dias_uteis_mes = contar_dias_uteis_mes(mes_sel, ano_sel)
+    dias_uteis_mes = contar_dias_uteis_mes(mes_s, ano_s)
 
     model = cp_model.CpModel()
     escala = {}
     trabalha_dia = {}
 
     for trabalhador in trabalhadores:
-        for dia in range(1, num_dias + 1):
+        for dia in range(1, num_dias_m + 1):
             trabalha_dia[(trabalhador, dia)] = model.NewBoolVar(f"trabalha_{trabalhador}_{dia}")
             for slot_index, _slot in enumerate(slots):
                 escala[(trabalhador, dia, slot_index)] = model.NewBoolVar(f"e_{trabalhador}_{dia}_{slot_index}")
 
     for trabalhador in trabalhadores:
-        for dia in range(1, num_dias + 1):
+        for dia in range(1, num_dias_m + 1):
             turnos_do_dia = [escala[(trabalhador, dia, s_idx)] for s_idx in range(len(slots))]
             model.Add(sum(turnos_do_dia) >= 1).OnlyEnforceIf(trabalha_dia[(trabalhador, dia)])
             model.Add(sum(turnos_do_dia) == 0).OnlyEnforceIf(trabalha_dia[(trabalhador, dia)].Not())
 
     for trabalhador in trabalhadores:
-        for dia in range(1, num_dias + 1):
+        for dia in range(1, num_dias_m + 1):
             for slot_index, slot in enumerate(slots):
                 if not trabalhador_pode_fazer(trabalhador, slot.Responsabilidade, slot.Turno):
                     model.Add(escala[(trabalhador, dia, slot_index)] == 0)
 
     for trabalhador in trabalhadores:
-        for d in range(1, num_dias - 4):
+        for d in range(1, num_dias_m - 4):
             model.Add(sum(trabalha_dia[(trabalhador, d + k)] for k in range(6)) <= 5)
 
     fins_de_semana = []
-    for d in range(1, num_dias):
-        if datetime(ano_sel, mes_sel, d).weekday() == 5:
-            if d + 1 <= num_dias:
+    for d in range(1, num_dias_m):
+        if datetime(ano_s, mes_s, d).weekday() == 5:
+            if d + 1 <= num_dias_m:
                 fins_de_semana.append((d, d + 1))
 
     fds_livre_var = {}
@@ -715,7 +746,7 @@ def executar_gerador_escala(mes_sel, ano_sel):
     pares_jornada_preferidos = []
     pares_responsabilidades_diferentes = []
     for trabalhador in trabalhadores:
-        for dia in range(1, num_dias + 1):
+        for dia in range(1, num_dias_m + 1):
             variaveis_m12 = [escala[(trabalhador, dia, slot_index)] for slot_index, slot in enumerate(slots) if slot.Turno == "M12"]
             variaveis_t24 = [escala[(trabalhador, dia, slot_index)] for slot_index, slot in enumerate(slots) if slot.Turno == "T24"]
             variaveis_outros = [escala[(trabalhador, dia, slot_index)] for slot_index, slot in enumerate(slots) if not e_turno_de_jornada_alargada(slot.Turno)]
@@ -747,17 +778,17 @@ def executar_gerador_escala(mes_sel, ano_sel):
         limite_12h = max(0, int(st.session_state.limites_jornadas_12h.get(trabalhador, LIMITE_JORNADAS_12H_PADRAO)))
         model.Add(sum(pares_jornada_por_trabalhador[trabalhador]) <= limite_12h)
 
-    for dia in range(1, num_dias + 1):
+    for dia in range(1, num_dias_m + 1):
         for slot_index, slot in enumerate(slots):
             coluna = chave_coluna_turno(slot)
             necessidade = int(df_nec.loc[str(dia), coluna])
             model.Add(sum(escala[(trabalhador, dia, slot_index)] for trabalhador in trabalhadores) == necessidade)
 
-    preferencias_turnos = st.session_state.get("preferencias_turnos")
+    preferencias_turnos = dados_m.get("preferencias_turnos")
     dias_ferias_por_trabalhador = {t: 0 for t in trabalhadores}
 
     for trabalhador in trabalhadores:
-        for dia in range(1, num_dias + 1):
+        for dia in range(1, num_dias_m + 1):
             preferencia = ""
             coluna_dia = str(dia)
             if isinstance(preferencias_turnos, pd.DataFrame) and trabalhador in preferencias_turnos.index and coluna_dia in preferencias_turnos.columns:
@@ -774,7 +805,7 @@ def executar_gerador_escala(mes_sel, ano_sel):
                         model.Add(escala[(trabalhador, dia, slot_index)] == 0)
 
     for trabalhador in trabalhadores:
-        for dia in range(1, num_dias):
+        for dia in range(1, num_dias_m):
             for slot_index, slot in enumerate(slots):
                 if not turno_atravessa_meia_noite(slot.Início, slot.Fim): continue
                 for proximo_index, proximo_slot in enumerate(slots):
@@ -787,7 +818,7 @@ def executar_gerador_escala(mes_sel, ano_sel):
 
     penalizacoes_t_meio = []
     for trabalhador in trabalhadores:
-        for dia in range(1, num_dias):
+        for dia in range(1, num_dias_m):
             turnos_t_dia = [escala[(trabalhador, dia, s_idx)] for s_idx, s in enumerate(slots) if s.Turno == "T"]
             if turnos_t_dia:
                 t_em_trabalho_seguido = model.NewBoolVar(f"t_in_middle_{trabalhador}_{dia}")
@@ -797,7 +828,7 @@ def executar_gerador_escala(mes_sel, ano_sel):
 
     penalizacoes_folga_isolada = []
     for trabalhador in trabalhadores:
-        for dia in range(2, num_dias):
+        for dia in range(2, num_dias_m):
             folga_1_dia = model.NewBoolVar(f"folga_isolada_{trabalhador}_{dia}")
             model.Add(trabalha_dia[(trabalhador, dia - 1)] + trabalha_dia[(trabalhador, dia)].Not() + trabalha_dia[(trabalhador, dia + 1)] == 3).OnlyEnforceIf(folga_1_dia)
             model.Add(trabalha_dia[(trabalhador, dia - 1)] + trabalha_dia[(trabalhador, dia)].Not() + trabalha_dia[(trabalhador, dia + 1)] < 3).OnlyEnforceIf(folga_1_dia.Not())
@@ -808,16 +839,16 @@ def executar_gerador_escala(mes_sel, ano_sel):
     for resp in todas_resps:
         contagens_resp = []
         for trabalhador in trabalhadores:
-            slots_resp = [escala[(trabalhador, d, s_idx)] for d in range(1, num_dias + 1) for s_idx, s in enumerate(slots) if s.Responsabilidade == resp]
-            var_c = model.NewIntVar(0, num_dias, f"count_resp_{resp}_{trabalhador}")
+            slots_resp = [escala[(trabalhador, d, s_idx)] for d in range(1, num_dias_m + 1) for s_idx, s in enumerate(slots) if s.Responsabilidade == resp]
+            var_c = model.NewIntVar(0, num_dias_m, f"count_resp_{resp}_{trabalhador}")
             model.Add(var_c == sum(slots_resp))
             contagens_resp.append(var_c)
         
-        max_resp = model.NewIntVar(0, num_dias, f"max_resp_{resp}")
-        min_resp = model.NewIntVar(0, num_dias, f"min_resp_{resp}")
+        max_resp = model.NewIntVar(0, num_dias_m, f"max_resp_{resp}")
+        min_resp = model.NewIntVar(0, num_dias_m, f"min_resp_{resp}")
         model.AddMaxEquality(max_resp, contagens_resp)
         model.AddMinEquality(min_resp, contagens_resp)
-        diff_resp = model.NewIntVar(0, num_dias, f"diff_resp_{resp}")
+        diff_resp = model.NewIntVar(0, num_dias_m, f"diff_resp_{resp}")
         model.Add(diff_resp == max_resp - min_resp)
         desvios_equidade.append(diff_resp)
 
@@ -825,16 +856,16 @@ def executar_gerador_escala(mes_sel, ano_sel):
     for cod_t in todos_codigos:
         contagens_cod = []
         for trabalhador in trabalhadores:
-            slots_cod = [escala[(trabalhador, d, s_idx)] for d in range(1, num_dias + 1) for s_idx, s in enumerate(slots) if s.Turno == cod_t]
-            var_c = model.NewIntVar(0, num_dias, f"count_cod_{cod_t}_{trabalhador}")
+            slots_cod = [escala[(trabalhador, d, s_idx)] for d in range(1, num_dias_m + 1) for s_idx, s in enumerate(slots) if s.Turno == cod_t]
+            var_c = model.NewIntVar(0, num_dias_m, f"count_cod_{cod_t}_{trabalhador}")
             model.Add(var_c == sum(slots_cod))
             contagens_cod.append(var_c)
         
-        max_cod = model.NewIntVar(0, num_dias, f"max_cod_{cod_t}")
-        min_cod = model.NewIntVar(0, num_dias, f"min_cod_{cod_t}")
+        max_cod = model.NewIntVar(0, num_dias_m, f"max_cod_{cod_t}")
+        min_cod = model.NewIntVar(0, num_dias_m, f"min_cod_{cod_t}")
         model.AddMaxEquality(max_cod, contagens_cod)
         model.AddMinEquality(min_cod, contagens_cod)
-        diff_cod = model.NewIntVar(0, num_dias, f"diff_cod_{cod_t}")
+        diff_cod = model.NewIntVar(0, num_dias_m, f"diff_cod_{cod_t}")
         model.Add(diff_cod == max_cod - min_cod)
         desvios_equidade.append(diff_cod)
 
@@ -849,7 +880,7 @@ def executar_gerador_escala(mes_sel, ano_sel):
         horas_ferias_int = int(round(dias_ferias_por_trabalhador[trabalhador] * HORAS_DIA_FERIAS_LICENCA * 10))
 
         expressao_horas = [horas_ferias_int]
-        for dia in range(1, num_dias + 1):
+        for dia in range(1, num_dias_m + 1):
             for slot_index in range(len(slots)):
                 expressao_horas.append(escala[(trabalhador, dia, slot_index)] * duracoes_int[slot_index])
 
@@ -897,7 +928,7 @@ def executar_gerador_escala(mes_sel, ano_sel):
             linha_meta_trabalhador = []
             horas_realizadas_trab = dias_ferias_por_trabalhador[trabalhador] * HORAS_DIA_FERIAS_LICENCA
 
-            for dia in range(1, num_dias + 1):
+            for dia in range(1, num_dias_m + 1):
                 pref_dia = ""
                 col_d = str(dia)
                 if isinstance(preferencias_turnos, pd.DataFrame) and trabalhador in preferencias_turnos.index and col_d in preferencias_turnos.columns:
@@ -948,18 +979,16 @@ def executar_gerador_escala(mes_sel, ano_sel):
             dados_escala[trabalhador] = linha_trabalhador
             dados_meta_resps[trabalhador] = linha_meta_trabalhador
 
-        colunas_dias = [str(dia) for dia in range(1, num_dias + 1)]
+        colunas_dias = [str(dia) for dia in range(1, num_dias_m + 1)]
         todas_colunas = colunas_dias + ["Horas Realizadas", "Alvo Contratual", "Banco de Horas"]
 
         df_resultado = pd.DataFrame.from_dict(dados_escala, orient="index", columns=todas_colunas)
         df_meta_resps = pd.DataFrame.from_dict(dados_meta_resps, orient="index", columns=todas_colunas)
 
-        # GUARDAR NA SESSÃO
-        st.session_state.escala_gerada = {
+        # GUARDAR NO HISTÓRICO DO MÊS
+        dados_m["escala_gerada"] = {
             "df_resultado": df_resultado,
             "df_meta_resps": df_meta_resps,
-            "mes": mes_sel,
-            "ano": ano_sel,
             "totais_horas_realizadas": totais_horas_realizadas,
             "banco_horas": banco_horas,
             "trabalhadores": trabalhadores
@@ -971,9 +1000,7 @@ def executar_gerador_escala(mes_sel, ano_sel):
         return False
 
 
-st.title("🗓️ Gestor Inteligente de Escalas de Trabalho")
-
-tabs = st.tabs(["1. Gestão da Equipa", "2. Responsabilidades e Turnos", "3. Necessidades Mensais", "4. Indisponividades", "5. Gerar Escala"])
+tabs = st.tabs(["1. Gestão da Equipa", "2. Responsabilidades e Turnos", "3. Necessidades Mensais", "4. Indisponibilidades", "5. Gerar Escala"])
 
 # -----------------------------------------------------------------------------
 # TAB 1: GESTÃO DA EQUIPA
@@ -1066,8 +1093,6 @@ with tabs[1]:
         st.info("As linhas sem responsabilidade ou turno não serão utilizadas.")
     if st.button("Guardar configuração dos turnos"):
         st.session_state.turnos = turnos_normalizados
-        st.session_state.pop("df_necessidades", None)
-        st.session_state.pop("assinatura_necessidades", None)
         guardar_estado_no_github()
         st.success("Responsabilidades e turnos guardados.")
         st.rerun()
@@ -1076,17 +1101,11 @@ with tabs[1]:
 # TAB 3: NECESSIDADES MENSAIS
 # -----------------------------------------------------------------------------
 with tabs[2]:
-    st.header("Configuração de Necessidades do Mês")
-    col_mes, col_ano = st.columns(2)
-    mes_sel = col_mes.selectbox("Mês", list(range(1, 13)), index=datetime.now().month - 1, key="tab3_mes")
-    ano_sel = col_ano.number_input("Ano", min_value=2024, max_value=2030, value=datetime.now().year, key="tab3_ano")
-    num_dias = calendar.monthrange(ano_sel, mes_sel)[1]
+    st.header(f"Necessidades do Mês: {calendar.month_name[mes_sel].capitalize()} / {ano_sel}")
     dias_uteis_mes = contar_dias_uteis_mes(mes_sel, ano_sel)
-    
-    st.info(f"📅 **{calendar.month_name[mes_sel]} {ano_sel}**: Este mês tem **{dias_uteis_mes} dias úteis** (alvo base de **{dias_uteis_mes * 7}h** para um contrato de 35h/semana).")
+    st.info(f"📅 **{calendar.month_name[mes_sel]} {ano_sel}**: Tem **{dias_uteis_mes} dias úteis** (alvo base de **{dias_uteis_mes * 7}h** para um contrato de 35h/semana).")
 
     turnos_ativos = normalizar_turnos(st.session_state.turnos)
-    assinatura_atual = ("dias_nas_linhas_numericos", mes_sel, ano_sel, assinatura_turnos(turnos_ativos))
 
     if turnos_ativos.empty:
         st.warning("Adicione responsabilidades e turnos na Tab 2 primeiro.")
@@ -1094,18 +1113,20 @@ with tabs[2]:
         slots_ordenados = turnos_ordenados(turnos_ativos)
         colunas_turnos = [chave_coluna_turno(slot) for slot in slots_ordenados]
         linhas_dias = [str(dia) for dia in range(1, num_dias + 1)]
-        if "df_necessidades" not in st.session_state or st.session_state.get("assinatura_necessidades") != assinatura_atual:
-            st.session_state.df_necessidades = pd.DataFrame(0, index=linhas_dias, columns=colunas_turnos)
-            st.session_state.assinatura_necessidades = assinatura_atual
+
+        df_nec_mes = dados_mes_atual.get("df_necessidades")
+        if not isinstance(df_nec_mes, pd.DataFrame) or df_nec_mes.shape != (num_dias, len(colunas_turnos)):
+            df_nec_mes = pd.DataFrame(0, index=linhas_dias, columns=colunas_turnos)
+            dados_mes_atual["df_necessidades"] = df_nec_mes
 
         st.caption("Cada linha representa um dia. Os fins de semana surgem destacados a dourado.")
-        necessidades_com_fins_de_semana = estilizar_fins_de_semana(st.session_state.df_necessidades, mes_sel, ano_sel, dias_nas_colunas=False)
+        necessidades_com_fins_de_semana = estilizar_fins_de_semana(df_nec_mes, mes_sel, ano_sel, dias_nas_colunas=False)
         
         df_editado_nec = st.data_editor(
             necessidades_com_fins_de_semana,
             width="stretch",
             num_rows="fixed",
-            key="editor_necessidades_mensais",
+            key=f"editor_necessidades_{chave_mes_atual}",
             column_config={
                 chave_coluna_turno(slot): st.column_config.NumberColumn(
                     f"{indicador_responsabilidade(slot.Responsabilidade)} {slot.Turno}",
@@ -1117,65 +1138,56 @@ with tabs[2]:
             }
         )
         if isinstance(df_editado_nec, pd.DataFrame):
-            st.session_state.df_necessidades = df_editado_nec.copy()
+            dados_mes_atual["df_necessidades"] = df_editado_nec.copy()
             
-        if st.button("💾 Guardar Necessidades Mensais"):
+        if st.button("💾 Guardar Necessidades Mensais", key="btn_save_nec"):
             guardar_estado_no_github()
 
 # -----------------------------------------------------------------------------
 # TAB 4: INDISPONIBILIDADES E PREFERÊNCIAS
 # -----------------------------------------------------------------------------
 with tabs[3]:
-    st.header("Turnos, Folgas e Férias da Equipa")
+    st.header(f"Turnos, Folgas e Férias: {calendar.month_name[mes_sel].capitalize()} / {ano_sel}")
     st.caption("Preencha diretamente a tabela por trabalhador e por dia. Célula vazia = disponível sem preferência, F = Folga, L = Licença/Férias (contabiliza 7h), ou um código de turno.")
     dias_do_mes = [str(dia) for dia in range(1, num_dias + 1)]
     codigos_turno = codigos_turno_ordenados(st.session_state.turnos)
-    assinatura_preferencias = (mes_sel, ano_sel, tuple(st.session_state.trabalhadores), tuple(codigos_turno))
-    preferencias_atuais = st.session_state.get("preferencias_turnos")
 
-    if not isinstance(preferencias_atuais, pd.DataFrame) or st.session_state.get("assinatura_preferencias") != assinatura_preferencias:
-        preferencias_turnos = pd.DataFrame("", index=st.session_state.trabalhadores, columns=dias_do_mes)
-        st.session_state.preferencias_turnos = preferencias_turnos
-        st.session_state.assinatura_preferencias = assinatura_preferencias
+    df_pref_mes = dados_mes_atual.get("preferencias_turnos")
+    if not isinstance(df_pref_mes, pd.DataFrame) or df_pref_mes.shape[1] != num_dias:
+        df_pref_mes = pd.DataFrame("", index=st.session_state.trabalhadores, columns=dias_do_mes)
+        dados_mes_atual["preferencias_turnos"] = df_pref_mes
 
     opcoes_tabela = ["", "F", "L", *codigos_turno]
-    preferencias_com_fins_de_semana = estilizar_fins_de_semana(st.session_state.preferencias_turnos, mes_sel, ano_sel, dias_nas_colunas=True)
+    preferencias_com_fins_de_semana = estilizar_fins_de_semana(df_pref_mes, mes_sel, ano_sel, dias_nas_colunas=True)
     
     df_editado_pref = st.data_editor(
         preferencias_com_fins_de_semana,
         width="stretch",
         num_rows="fixed",
-        key="editor_preferencias_turnos",
+        key=f"editor_pref_{chave_mes_atual}",
         column_config={dia: st.column_config.SelectboxColumn(dia, options=opcoes_tabela, required=False, help="Escolha F para folga, L para Licença/Férias (7h) ou um código de turno.") for dia in dias_do_mes}
     )
     if isinstance(df_editado_pref, pd.DataFrame):
-        st.session_state.preferencias_turnos = df_editado_pref.copy()
+        dados_mes_atual["preferencias_turnos"] = df_editado_pref.copy()
 
-    if st.button("💾 Guardar Indisponibilidades e Férias"):
+    if st.button("💾 Guardar Indisponibilidades e Férias", key="btn_save_pref"):
         guardar_estado_no_github()
 
 # -----------------------------------------------------------------------------
 # TAB 5: GERADOR DE ESCALA AUTOMÁTICA
 # -----------------------------------------------------------------------------
 with tabs[4]:
-    st.header("Gerador de Escala Automática")
+    st.header(f"Escala Optimizada: {calendar.month_name[mes_sel].capitalize()} / {ano_sel}")
     st.caption("Regras Ativas: Múltiplos turnos M12+T24; descanso noturno; máx. 5 dias seguidos; 1-2 fds livres; distribuição equitativa de turnos/responsabilidades; Turno T ao fim da sequência; folgas agrupadas (2 a 3) e distribuídas pelo mês.")
 
-    # Alinhamento do Mês e Ano
-    if "mes_sel" in locals():
-        mes_gerar = mes_sel
-        ano_gerar = ano_sel
-    else:
-        mes_gerar = datetime.now().month
-        ano_gerar = datetime.now().year
+    escala_existente = dados_mes_atual.get("escala_gerada")
 
-    # Lógica de confirmação antes de gerar/substituir
     if st.session_state.confirmar_substituicao:
-        st.warning("⚠️ Já existe uma escala gerada. Deseja substituí-la pela nova escala?")
+        st.warning(f"⚠️ Já existe uma escala gerada para {calendar.month_name[mes_sel].capitalize()} / {ano_sel}. Deseja substituí-la?")
         col_sim, col_nao = st.columns(2)
         if col_sim.button("✅ Sim, Gerar Nova Escala", type="primary"):
             st.session_state.confirmar_substituicao = False
-            if executar_gerador_escala(mes_gerar, ano_gerar):
+            if executar_gerador_escala(mes_sel, ano_sel):
                 st.success("Nova escala gerada com sucesso!")
                 st.rerun()
         if col_nao.button("❌ Cancelar"):
@@ -1183,63 +1195,56 @@ with tabs[4]:
             st.rerun()
     else:
         if st.button("⚡ Gerar Escala Optimizada", type="primary"):
-            if st.session_state.escala_gerada is not None:
+            if escala_existente is not None:
                 st.session_state.confirmar_substituicao = True
                 st.rerun()
             else:
-                if executar_gerador_escala(mes_gerar, ano_gerar):
+                if executar_gerador_escala(mes_sel, ano_sel):
                     st.success("Escala gerada com sucesso!")
                     st.rerun()
 
-    # RENDERIZAR ESCALA GUARDADA (PERSISTENTE)
-    if st.session_state.escala_gerada is not None:
-        eg = st.session_state.escala_gerada
-        df_resultado = eg["df_resultado"]
-        df_meta_resps = eg["df_meta_resps"]
-        mes_escala = eg["mes"]
-        ano_escala = eg["ano"]
-        banco_horas = eg["banco_horas"]
-        totais_horas_realizadas = eg["totais_horas_realizadas"]
-        trabalhadores_escala = eg["trabalhadores"]
+    # RENDERIZAR ESCALA GUARDADA PARA O MÊS ATUAL
+    if escala_existente is not None:
+        df_resultado = escala_existente["df_resultado"]
+        df_meta_resps = escala_existente["df_meta_resps"]
+        banco_horas = escala_existente["banco_horas"]
+        totais_horas_realizadas = escala_existente["totais_horas_realizadas"]
+        trabalhadores_escala = escala_existente["trabalhadores"]
 
         st.markdown("---")
-        st.subheader(f"📋 Escala Atual: {calendar.month_name[mes_escala].capitalize()} de {ano_escala}")
+        st.subheader(f"📋 Escala de {calendar.month_name[mes_sel].capitalize()} de {ano_sel}")
 
         # Opções de Exportação e Impressão
         col_pdf, col_exp1, col_exp2 = st.columns([1, 1, 1])
 
-        # PDF Gerado e Prontinho a Descarregar
-        pdf_bytes = gerar_pdf_escala(df_resultado, df_meta_resps, mes_escala, ano_escala)
+        pdf_bytes = gerar_pdf_escala(df_resultado, df_meta_resps, mes_sel, ano_sel)
         col_pdf.download_button(
             label="📄 Descarregar Escala em PDF",
             data=pdf_bytes,
-            file_name=f"escala_{mes_escala}_{ano_escala}.pdf",
+            file_name=f"escala_{mes_sel}_{ano_sel}.pdf",
             mime="application/pdf",
             use_container_width=True,
             type="primary"
         )
 
-        # Exportar Excel
-        excel_bytes = gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes_escala, ano_escala)
+        excel_bytes = gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes_sel, ano_sel)
         col_exp1.download_button(
             label="📊 Descarregar Excel (.xlsx)",
             data=excel_bytes,
-            file_name=f"escala_{mes_escala}_{ano_escala}.xlsx",
+            file_name=f"escala_{mes_sel}_{ano_sel}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True
         )
 
-        # Exportar CSV
         csv = df_resultado.to_csv().encode("utf-8")
         col_exp2.download_button(
             label="📥 Descarregar CSV",
             data=csv,
-            file_name=f"escala_{mes_escala}_{ano_escala}.csv",
+            file_name=f"escala_{mes_sel}_{ano_sel}.csv",
             mime="text/csv",
             use_container_width=True
         )
 
-        # Renderizar Legenda das Cores do Texto por Responsabilidade
         st.markdown("### 🎨 Legenda dos Turnos por Setor")
         legenda_html = "<div style='display:flex; gap:15px; flex-wrap:wrap; margin-bottom:15px;'>"
         for resp, c_info in RESPONSABILIDADE_CORES.items():
@@ -1247,8 +1252,7 @@ with tabs[4]:
         legenda_html += "</div>"
         st.markdown(legenda_html, unsafe_allow_html=True)
 
-        # Renderizar Tabela HTML
-        tabela_html = renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes_escala, ano_escala)
+        tabela_html = renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes_sel, ano_sel)
         st.markdown(tabela_html, unsafe_allow_html=True)
 
         st.subheader("📊 Resumo do Banco de Horas da Equipa")
