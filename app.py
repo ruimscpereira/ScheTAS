@@ -39,16 +39,25 @@ DEFAULT_TURNOS = [
 RESPONSABILIDADE_CORES = {
     "Radiologia Convencional": {"fundo": "#ffffff", "texto": "#2563eb", "hex": "2563EB"},
     "Tomografia Computorizada": {"fundo": "#ffffff", "texto": "#16a34a", "hex": "16A34A"},
-    "Ecografia": {"fundo": "#ffffff", "texto": "#dc2626", "hex": "DC2626"},
     "Ressonância Magnética": {"fundo": "#ffffff", "texto": "#ea580c", "hex": "EA580C"},
+    "Ecografia": {"fundo": "#ffffff", "texto": "#dc2626", "hex": "DC2626"},
 }
 
 RESPONSABILIDADE_INDICADORES = {
     "Radiologia Convencional": "🔵",
     "Tomografia Computorizada": "🟢",
-    "Ecografia": "🔴",
     "Ressonância Magnética": "🟠",
+    "Ecografia": "🔴",
 }
+
+ORDEM_RESPONSABILIDADES = [
+    "Radiologia Convencional",
+    "Tomografia Computorizada",
+    "Ressonância Magnética",
+    "Ecografia"
+]
+
+ORDEM_TURNOS_INTERNA = ["M3", "T", "M12", "M75", "T24"]
 
 LIMITE_JORNADAS_12H_PADRAO = 2
 HORAS_CONTRATO_SEMANAL_PADRAO = 35.0
@@ -251,20 +260,26 @@ def opcoes_turnos_por_responsabilidade(df):
     return resultado
 
 
-def chave_ordenacao_turno(codigo):
-    correspondencia = re.match(r"^([A-Za-z]+)(\d*)$", codigo.strip())
-    if not correspondencia:
-        return (2, codigo.lower(), -1)
-    tipo, numero = correspondencia.groups()
-    ordem_tipo = {"M": 0, "T": 1}.get(tipo.upper(), 2)
-    ordem_numero = int(numero) if numero else -1
-    return (ordem_tipo, tipo.lower(), ordem_numero)
+def chave_ordenacao_personalizada(linha):
+    """Ordena estritamente por Responsabilidades (Radiologia Convencional -> Tomografia Computorizada -> Ressonância Magnética -> Ecografia)
+    e por Turnos internos (M3 -> T -> M12 -> M75 -> T24)."""
+    try:
+        idx_resp = ORDEM_RESPONSABILIDADES.index(linha.Responsabilidade)
+    except ValueError:
+        idx_resp = 99
+        
+    try:
+        idx_turno = ORDEM_TURNOS_INTERNA.index(linha.Turno)
+    except ValueError:
+        idx_turno = 99
+        
+    return (idx_resp, linha.Responsabilidade.lower(), idx_turno, linha.Turno.lower())
 
 
 def turnos_ordenados(df):
     return sorted(
         normalizar_turnos(df).itertuples(index=False),
-        key=lambda linha: (chave_ordenacao_turno(linha.Turno), linha.Responsabilidade.lower()),
+        key=chave_ordenacao_personalizada
     )
 
 
@@ -469,7 +484,7 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
         fontName='Helvetica-Bold',
         fontSize=11,
         leading=14,
-        alignment=0, # Esquerda
+        alignment=0,
         textColor=colors.HexColor('#1E3A8A')
     )
 
@@ -479,7 +494,7 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
         fontName='Helvetica-Bold',
         fontSize=15,
         leading=18,
-        alignment=1, # Centro
+        alignment=1,
         textColor=colors.HexColor('#111827'),
         spaceAfter=12
     )
@@ -491,7 +506,6 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
 
     elements = []
 
-    # 1. CONSTRUÇÃO DO CABEÇALHO (Serviço à Esquerda, Logótipo à Direita sem distorção)
     p_servico = Paragraph("<b>ULS Região de Aveiro</b><br/><font size=9 color='#4B5563'>Serviço de Imagiologia</font>", style_servico)
     
     logo_path = "logo_ulsra.png"
@@ -502,7 +516,6 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
                 break
 
     if os.path.exists(logo_path):
-        # Utiliza kind="proportional" para manter a proporção correta no ReportLab
         img_logo = RLImage(logo_path, width=160, height=45, kind="proportional")
     else:
         img_logo = Paragraph("<font size=8 color='#9CA3AF'>[Logótipo ULSRA]</font>", style_servico)
@@ -521,12 +534,10 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
     elements.append(header_table)
     elements.append(Spacer(1, 4))
 
-    # 2. TÍTULO ATUALIZADO
     nome_mes = calendar.month_name[mes].capitalize()
     elements.append(Paragraph(f"Escala de Trabalho Mensal - TAS - {nome_mes} {ano}", style_titulo))
     elements.append(Spacer(1, 4))
 
-    # 3. MATRIZ DA TABELA DA ESCALA
     headers = ["Trabalhador"] + list(df_resultado.columns)
     table_data = []
 
@@ -1172,7 +1183,7 @@ with tabs[1]:
         st.rerun()
 
 # -----------------------------------------------------------------------------
-# TAB 3: NECESSIDADES MENSAIS
+# TAB 3: NECESSIDADES MENSAIS (ORDENAÇÃO RIGOROSA DE TURNOS E RESPONSABILIDADES)
 # -----------------------------------------------------------------------------
 with tabs[2]:
     st.header(f"Necessidades do Mês: {calendar.month_name[mes_sel].capitalize()} / {ano_sel}")
@@ -1189,9 +1200,16 @@ with tabs[2]:
         linhas_dias = [str(dia) for dia in range(1, num_dias + 1)]
 
         df_nec_mes = dados_mes_atual.get("df_necessidades")
-        if not isinstance(df_nec_mes, pd.DataFrame) or df_nec_mes.shape != (num_dias, len(colunas_turnos)):
-            df_nec_mes = pd.DataFrame(0, index=linhas_dias, columns=colunas_turnos)
+        if not isinstance(df_nec_mes, pd.DataFrame) or list(df_nec_mes.columns) != colunas_turnos or len(df_nec_mes) != num_dias:
+            df_nec_novo = pd.DataFrame(0, index=linhas_dias, columns=colunas_turnos)
+            if isinstance(df_nec_mes, pd.DataFrame):
+                for col in colunas_turnos:
+                    if col in df_nec_mes.columns:
+                        df_nec_novo[col] = df_nec_mes[col]
+            df_nec_mes = df_nec_novo
             dados_mes_atual["df_necessidades"] = df_nec_mes
+        else:
+            df_nec_mes = df_nec_mes.reindex(columns=colunas_turnos)
 
         st.caption("Cada linha representa um dia. Os fins de semana surgem destacados a dourado.")
         necessidades_com_fins_de_semana = estilizar_fins_de_semana(df_nec_mes, mes_sel, ano_sel, dias_nas_colunas=False)
@@ -1204,7 +1222,7 @@ with tabs[2]:
             column_config={
                 chave_coluna_turno(slot): st.column_config.NumberColumn(
                     f"{indicador_responsabilidade(slot.Responsabilidade)} {slot.Turno}",
-                    help=slot.Responsabilidade,
+                    help=f"{slot.Responsabilidade} — Turno {slot.Turno}",
                     min_value=0,
                     step=1,
                     format="%d"
