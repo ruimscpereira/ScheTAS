@@ -9,7 +9,8 @@
     "Maria Martins Marques",
     "Luciana Pinto",
     "Marlene Estevão",
-    "Paula Marques"
+    "Paula Marques",
+    "Sandra Campos"
   ],
   "trabalhadores_ativos": {
     "Fátima Silva": true,
@@ -20,8 +21,9 @@
     "Maria Emilia Ribeiro": true,
     "Maria Martins Marques": true,
     "Luciana Pinto": true,
-    "Marlene Estevão": true,
-    "Paula Marques": true
+    "Marlene Estevão": false,
+    "Paula Marques": true,
+    "Sandra Campos": true
   },
   "preferencias_jornadas_12h": {
     "Ana Silva": false,
@@ -38,7 +40,8 @@
     "Maria Martins Marques": true,
     "Luciana Pinto": false,
     "Marlene Estevão": true,
-    "Paula Marques": false
+    "Paula Marques": false,
+    "Sandra Campos": false
   },
   "limites_jornadas_12h": {
     "Ana Silva": 31,
@@ -55,7 +58,8 @@
     "Maria Martins Marques": 6,
     "Luciana Pinto": 4,
     "Marlene Estevão": 6,
-    "Paula Marques": 0
+    "Paula Marques": 0,
+    "Sandra Campos": 4
   },
   "horas_contrato_semanal": {
     "Fátima Silva": 35.0,
@@ -67,7 +71,8 @@
     "Maria Martins Marques": 35.0,
     "Luciana Pinto": 35.0,
     "Marlene Estevão": 35.0,
-    "Paula Marques": 35.0
+    "Paula Marques": 35.0,
+    "Sandra Campos": 35.0
   },
   "competencias": {
     "Fátima Silva": {
@@ -261,6 +266,26 @@
       ]
     },
     "Paula Marques": {
+      "Radiologia Convencional": [
+        "M3",
+        "T",
+        "M12",
+        "T24"
+      ],
+      "Tomografia Computorizada": [
+        "M3",
+        "T",
+        "M12",
+        "T24"
+      ],
+      "Ecografia": [
+        "M3",
+        "M75",
+        "M12",
+        "T24"
+      ]
+    },
+    "Sandra Campos": {
       "Radiologia Convencional": [
         "M3",
         "T",
