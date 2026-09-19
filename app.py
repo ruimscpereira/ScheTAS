@@ -304,9 +304,6 @@ def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
                 top: 0;
                 width: 100%;
             }}
-            .no-print {{
-                display: none !important;
-            }}
             .escala-table {{
                 font-size: 0.75rem !important;
             }}
@@ -731,7 +728,7 @@ with tabs[3]:
     if isinstance(df_editado_pref, pd.DataFrame):
         st.session_state.preferencias_turnos = df_editado_pref.copy()
 
-    if st.button("💾 Guardar Indisponibilidades e Férias"):
+    if st.button("💾 Guardar Indisponividades e Férias"):
         guardar_estado_no_github()
 
 # -----------------------------------------------------------------------------
@@ -1061,9 +1058,28 @@ with tabs[4]:
                 # Botões de Impressão e Exportação
                 col_print, col_exp1, col_exp2 = st.columns([1, 1, 1])
 
-                # Botão de Impressão com acionamento JavaScript nativo
-                if col_print.button("🖨️ Imprimir / Guardar em PDF", use_container_width=True, type="primary"):
-                    components.html("<script>window.parent.print();</script>", height=0, width=0)
+                # Botão HTML/JS nativo (não causa rerun no Streamlit)
+                with col_print:
+                    components.html(
+                        """
+                        <button onclick="window.parent.print()" style="
+                            width: 100%;
+                            background-color: #ff4b4b;
+                            color: white;
+                            padding: 9px 16px;
+                            border: none;
+                            border-radius: 8px;
+                            font-size: 16px;
+                            font-weight: 600;
+                            cursor: pointer;
+                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+                        ">
+                            🖨️ Imprimir / Guardar em PDF
+                        </button>
+                        """,
+                        height=48,
+                    )
 
                 # Exportar Excel
                 excel_bytes = gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes_sel, ano_sel)
