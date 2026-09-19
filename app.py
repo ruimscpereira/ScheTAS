@@ -43,7 +43,6 @@ RESPONSABILIDADE_CORES = {
     "Ecografia": {"fundo": "#ffffff", "texto": "#dc2626", "hex": "DC2626"},
 }
 
-# Ordem hierárquica personalizada pedida para Responsabilidades e Turnos
 ORDEM_RESPONSABILIDADES = [
     "Radiologia Convencional",
     "Tomografia Computorizada",
@@ -315,6 +314,37 @@ def dia_a_partir_do_rotulo(rotulo):
     return int(correspondencia.group(1)) if correspondencia else None
 
 
+def estilizar_necessidades_com_cabecalhos_coloridos(df, slots_ordenados, mes, ano):
+    """Aplica o estilo visual dos fins de semana e pinta os textos dos cabeçalhos com a cor da responsabilidade."""
+    preenchimento = "#fff7ed"
+    borda_fim_de_semana = "#f59e0b"
+
+    def estilo_linha(linha):
+        dia = dia_a_partir_do_rotulo(linha.name)
+        fim_de_semana = dia is not None and e_fim_de_semana(dia, mes, ano)
+        return [f"background-color: {preenchimento}; border: 2px solid {borda_fim_de_semana};" if fim_de_semana else "" for _ in linha]
+
+    def estilo_indice_linhas(indice):
+        return [
+            f"font-weight: bold; background-color: #fff7ed; border-left: 4px solid {borda_fim_de_semana}; color: #9a3412;"
+            if (dia_a_partir_do_rotulo(rotulo) is not None and e_fim_de_semana(dia_a_partir_do_rotulo(rotulo), mes, ano))
+            else ""
+            for rotulo in indice
+        ]
+
+    # Mapeamento da cor do texto do cabeçalho para cada coluna
+    mapa_cores_colunas = {}
+    for slot in slots_ordenados:
+        chave_col = chave_coluna_turno(slot)
+        cor_hex = RESPONSABILIDADE_CORES.get(slot.Responsabilidade, {}).get("texto", "#111827")
+        mapa_cores_colunas[chave_col] = f"color: {cor_hex}; font-weight: bold;"
+
+    def estilo_cabecalho_colunas(indice):
+        return [mapa_cores_colunas.get(rotulo, "") for rotulo in indice]
+
+    return df.style.apply(estilo_linha, axis=1).apply_index(estilo_indice_linhas, axis=0).apply_index(estilo_cabecalho_colunas, axis=1)
+
+
 def estilizar_fins_de_semana(df, mes, ano, dias_nas_colunas):
     preenchimento = "#fff7ed"
     borda_fim_de_semana = "#f59e0b"
@@ -469,7 +499,7 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
         fontName='Helvetica-Bold',
         fontSize=11,
         leading=14,
-        alignment=0, # Esquerda
+        alignment=0,
         textColor=colors.HexColor('#1E3A8A')
     )
 
@@ -479,7 +509,7 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
         fontName='Helvetica-Bold',
         fontSize=15,
         leading=18,
-        alignment=1, # Centro
+        alignment=1,
         textColor=colors.HexColor('#111827'),
         spaceAfter=12
     )
@@ -1168,7 +1198,7 @@ with tabs[1]:
         st.rerun()
 
 # -----------------------------------------------------------------------------
-# TAB 3: NECESSIDADES MENSAIS (COM CORES NO TEXTO E ORDENAÇÃO EXATA)
+# TAB 3: NECESSIDADES MENSAIS (CABEÇALHOS COLORIDOS E ORDENAÇÃO EXATA)
 # -----------------------------------------------------------------------------
 with tabs[2]:
     st.header(f"Necessidades do Mês: {calendar.month_name[mes_sel].capitalize()} / {ano_sel}")
@@ -1180,14 +1210,12 @@ with tabs[2]:
     if turnos_ativos.empty:
         st.warning("Adicione responsabilidades e turnos na Tab 2 primeiro.")
     else:
-        # Slots ordenados segundo a hierarquia especificada
         slots_ordenados = turnos_ordenados(turnos_ativos)
         colunas_turnos = [chave_coluna_turno(slot) for slot in slots_ordenados]
         linhas_dias = [str(dia) for dia in range(1, num_dias + 1)]
 
         df_nec_mes = dados_mes_atual.get("df_necessidades")
         
-        # Garante a reordenação das colunas se as definições mudarem
         if not isinstance(df_nec_mes, pd.DataFrame) or list(df_nec_mes.columns) != colunas_turnos or len(df_nec_mes) != num_dias:
             df_nec_novo = pd.DataFrame(0, index=linhas_dias, columns=colunas_turnos)
             if isinstance(df_nec_mes, pd.DataFrame):
@@ -1197,18 +1225,15 @@ with tabs[2]:
             df_nec_mes = df_nec_novo
             dados_mes_atual["df_necessidades"] = df_nec_mes
 
-        st.caption("Cada linha representa um dia. Os fins de semana surgem destacados a dourado.")
-        necessidades_com_fins_de_semana = estilizar_fins_de_semana(df_nec_mes, mes_sel, ano_sel, dias_nas_colunas=False)
+        st.caption("Cada linha representa um dia. Os fins de semana surgem destacados a dourado e os nomes dos turnos surgem pintados com a cor do seu setor.")
         
-        # Cria a configuração de colunas colorindo apenas as letras dos turnos
+        necessidades_estilizadas = estilizar_necessidades_com_cabecalhos_coloridos(df_nec_mes, slots_ordenados, mes_sel, ano_sel)
+        
         configuracao_colunas = {}
         for slot in slots_ordenados:
-            cor_hex = RESPONSABILIDADE_CORES.get(slot.Responsabilidade, {}).get("hex", "111827")
-            # Usa HTML no título da coluna para ter o texto do turno com a cor da responsabilidade
-            rotulo_formatado = f":color[#{cor_hex}][**{slot.Turno}**] ({slot.Responsabilidade})"
-            
+            rotulo_limpo = f"{slot.Turno} ({slot.Responsabilidade})"
             configuracao_colunas[chave_coluna_turno(slot)] = st.column_config.NumberColumn(
-                label=rotulo_formatado,
+                label=rotulo_limpo,
                 help=f"{slot.Responsabilidade} — Turno {slot.Turno}",
                 min_value=0,
                 step=1,
@@ -1216,7 +1241,7 @@ with tabs[2]:
             )
 
         df_editado_nec = st.data_editor(
-            necessidades_com_fins_de_semana,
+            necessidades_estilizadas,
             width="stretch",
             num_rows="fixed",
             key=f"editor_necessidades_{chave_mes_atual}",
