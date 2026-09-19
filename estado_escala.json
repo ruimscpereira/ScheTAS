@@ -6,7 +6,8 @@
     "Maria Helena Cardoso",
     "Luísa Apresentação",
     "Maria Emilia Ribeiro",
-    "Maria Martins Marques"
+    "Maria Martins Marques",
+    "Luciana Pinto"
   ],
   "trabalhadores_ativos": {
     "Fátima Silva": true,
@@ -15,7 +16,8 @@
     "Maria Helena Cardoso": true,
     "Luísa Apresentação": true,
     "Maria Emilia Ribeiro": true,
-    "Maria Martins Marques": true
+    "Maria Martins Marques": true,
+    "Luciana Pinto": true
   },
   "preferencias_jornadas_12h": {
     "Ana Silva": false,
@@ -29,7 +31,8 @@
     "Maria Helena Cardoso": false,
     "Luísa Apresentação": false,
     "Maria Emilia Ribeiro": false,
-    "Maria Martins Marques": true
+    "Maria Martins Marques": true,
+    "Luciana Pinto": false
   },
   "limites_jornadas_12h": {
     "Ana Silva": 31,
@@ -43,7 +46,8 @@
     "Maria Helena Cardoso": 2,
     "Luísa Apresentação": 2,
     "Maria Emilia Ribeiro": 4,
-    "Maria Martins Marques": 6
+    "Maria Martins Marques": 6,
+    "Luciana Pinto": 4
   },
   "horas_contrato_semanal": {
     "Fátima Silva": 35.0,
@@ -52,7 +56,8 @@
     "Maria Helena Cardoso": 35.0,
     "Luísa Apresentação": 35.0,
     "Maria Emilia Ribeiro": 35.0,
-    "Maria Martins Marques": 35.0
+    "Maria Martins Marques": 35.0,
+    "Luciana Pinto": 35.0
   },
   "competencias": {
     "Fátima Silva": {
@@ -174,6 +179,30 @@
       ]
     },
     "Maria Martins Marques": {
+      "Radiologia Convencional": [
+        "M3",
+        "T",
+        "M12",
+        "T24"
+      ],
+      "Tomografia Computorizada": [
+        "M3",
+        "T",
+        "M12",
+        "T24"
+      ],
+      "Ressonância Magnética": [
+        "M12",
+        "T24"
+      ],
+      "Ecografia": [
+        "M3",
+        "M75",
+        "M12",
+        "T24"
+      ]
+    },
+    "Luciana Pinto": {
       "Radiologia Convencional": [
         "M3",
         "T",
@@ -823,7 +852,8 @@
       "Clarisse Castro",
       "Maria Helena Cardoso",
       "Luísa Apresentação",
-      "Maria Emilia Ribeiro"
+      "Maria Emilia Ribeiro",
+      "Maria Martins Marques"
     ],
     "columns": [
       "1",
@@ -858,6 +888,38 @@
       "30"
     ],
     "data": [
+      [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
       [
         "",
         "",
