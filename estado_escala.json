@@ -8,7 +8,8 @@
     "Maria Emilia Ribeiro",
     "Maria Martins Marques",
     "Luciana Pinto",
-    "Marlene Estevão"
+    "Marlene Estevão",
+    "Paula Marques"
   ],
   "trabalhadores_ativos": {
     "Fátima Silva": true,
@@ -19,7 +20,8 @@
     "Maria Emilia Ribeiro": true,
     "Maria Martins Marques": true,
     "Luciana Pinto": true,
-    "Marlene Estevão": true
+    "Marlene Estevão": true,
+    "Paula Marques": true
   },
   "preferencias_jornadas_12h": {
     "Ana Silva": false,
@@ -35,7 +37,8 @@
     "Maria Emilia Ribeiro": false,
     "Maria Martins Marques": true,
     "Luciana Pinto": false,
-    "Marlene Estevão": true
+    "Marlene Estevão": true,
+    "Paula Marques": false
   },
   "limites_jornadas_12h": {
     "Ana Silva": 31,
@@ -51,7 +54,8 @@
     "Maria Emilia Ribeiro": 4,
     "Maria Martins Marques": 6,
     "Luciana Pinto": 4,
-    "Marlene Estevão": 6
+    "Marlene Estevão": 6,
+    "Paula Marques": 0
   },
   "horas_contrato_semanal": {
     "Fátima Silva": 35.0,
@@ -62,7 +66,8 @@
     "Maria Emilia Ribeiro": 35.0,
     "Maria Martins Marques": 35.0,
     "Luciana Pinto": 35.0,
-    "Marlene Estevão": 35.0
+    "Marlene Estevão": 35.0,
+    "Paula Marques": 35.0
   },
   "competencias": {
     "Fátima Silva": {
@@ -245,6 +250,26 @@
         "T24"
       ],
       "Ressonância Magnética": [
+        "M12",
+        "T24"
+      ],
+      "Ecografia": [
+        "M3",
+        "M75",
+        "M12",
+        "T24"
+      ]
+    },
+    "Paula Marques": {
+      "Radiologia Convencional": [
+        "M3",
+        "T",
+        "M12",
+        "T24"
+      ],
+      "Tomografia Computorizada": [
+        "M3",
+        "T",
         "M12",
         "T24"
       ],
