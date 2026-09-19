@@ -3,3 +3,4 @@ ortools
 pandas
 openpyxl
 PyGithub
+reportlab
