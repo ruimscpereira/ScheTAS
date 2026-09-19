@@ -68,7 +68,6 @@ def guardar_estado_no_github():
         
         turnos_dict = st.session_state.turnos.to_dict(orient="records") if isinstance(st.session_state.turnos, pd.DataFrame) else []
 
-        # Serializar dicionário de meses (df_necessidades, preferencias_turnos, escala_gerada)
         historico_meses_dict = {}
         for chave_mes, dados_m in st.session_state.historico_meses.items():
             df_nec_dict = dados_m["df_necessidades"].to_dict(orient="split") if isinstance(dados_m.get("df_necessidades"), pd.DataFrame) else None
@@ -81,6 +80,7 @@ def guardar_estado_no_github():
                     "df_resultado": eg["df_resultado"].to_dict(orient="split"),
                     "df_meta_resps": eg["df_meta_resps"].to_dict(orient="split"),
                     "totais_horas_realizadas": eg["totais_horas_realizadas"],
+                    "horas_fds_realizadas": eg.get("horas_fds_realizadas", {}),
                     "banco_horas": eg["banco_horas"],
                     "trabalhadores": eg["trabalhadores"]
                 }
@@ -137,7 +137,6 @@ def carregar_estado_do_github():
         if dados.get("turnos"):
             st.session_state.turnos = pd.DataFrame(dados["turnos"])
 
-        # Desserializar histórico mensal
         historico_carregado = {}
         for chave_mes, dados_m in dados.get("historico_meses", {}).items():
             df_nec = pd.DataFrame(dados_m["df_necessidades"]["data"], index=dados_m["df_necessidades"]["index"], columns=dados_m["df_necessidades"]["columns"]) if dados_m.get("df_necessidades") else None
@@ -150,6 +149,7 @@ def carregar_estado_do_github():
                     "df_resultado": pd.DataFrame(eg["df_resultado"]["data"], index=eg["df_resultado"]["index"], columns=eg["df_resultado"]["columns"]),
                     "df_meta_resps": pd.DataFrame(eg["df_meta_resps"]["data"], index=eg["df_meta_resps"]["index"], columns=eg["df_meta_resps"]["columns"]),
                     "totais_horas_realizadas": eg["totais_horas_realizadas"],
+                    "horas_fds_realizadas": eg.get("horas_fds_realizadas", {}),
                     "banco_horas": eg["banco_horas"],
                     "trabalhadores": eg["trabalhadores"]
                 }
@@ -695,6 +695,7 @@ def executar_gerador_escala(mes_s, ano_s):
 
     slots = turnos_ordenados(turnos)
     duracoes_slots = [calcular_duracao_turno_horas(s.Início, s.Fim) for s in slots]
+    duracoes_int = [int(round(d * 10)) for d in duracoes_slots]
     dias_uteis_mes = contar_dias_uteis_mes(mes_s, ano_s)
 
     model = cp_model.CpModel()
@@ -724,6 +725,11 @@ def executar_gerador_escala(mes_s, ano_s):
             model.Add(sum(trabalha_dia[(trabalhador, d + k)] for k in range(6)) <= 5)
 
     fins_de_semana = []
+    dias_fim_de_semana = []
+    for d in range(1, num_dias_m + 1):
+        if e_fim_de_semana(d, mes_s, ano_s):
+            dias_fim_de_semana.append(d)
+
     for d in range(1, num_dias_m):
         if datetime(ano_s, mes_s, d).weekday() == 5:
             if d + 1 <= num_dias_m:
@@ -740,6 +746,24 @@ def executar_gerador_escala(mes_s, ano_s):
 
         if fins_de_semana:
             model.Add(sum(fds_livre_var[(trabalhador, idx_fds)] for idx_fds in range(len(fins_de_semana))) >= 1)
+
+    # REGRA DE EQUIDADE DE HORAS AO FIM DE SEMANA
+    horas_fds_var = {}
+    for trabalhador in trabalhadores:
+        expressao_fds = []
+        for dia in dias_fim_de_semana:
+            for slot_index in range(len(slots)):
+                expressao_fds.append(escala[(trabalhador, dia, slot_index)] * duracoes_int[slot_index])
+        v_h_fds = model.NewIntVar(0, 1000, f"hrs_fds_{trabalhador}")
+        model.Add(v_h_fds == sum(expressao_fds))
+        horas_fds_var[trabalhador] = v_h_fds
+
+    max_hrs_fds = model.NewIntVar(0, 1000, "max_hrs_fds")
+    min_hrs_fds = model.NewIntVar(0, 1000, "min_hrs_fds")
+    model.AddMaxEquality(max_hrs_fds, list(horas_fds_var.values()))
+    model.AddMinEquality(min_hrs_fds, list(horas_fds_var.values()))
+    desvio_hrs_fds = model.NewIntVar(0, 1000, "desvio_hrs_fds")
+    model.Add(desvio_hrs_fds == max_hrs_fds - min_hrs_fds)
 
     pares_jornada = []
     pares_jornada_por_trabalhador = {trabalhador: [] for trabalhador in trabalhadores}
@@ -869,7 +893,6 @@ def executar_gerador_escala(mes_s, ano_s):
         model.Add(diff_cod == max_cod - min_cod)
         desvios_equidade.append(diff_cod)
 
-    duracoes_int = [int(round(d * 10)) for d in duracoes_slots]
     desvios_absolutos = []
     for trabalhador in trabalhadores:
         hrs_semanais = float(st.session_state.horas_contrato_semanal.get(trabalhador, HORAS_CONTRATO_SEMANAL_PADRAO))
@@ -903,6 +926,9 @@ def executar_gerador_escala(mes_s, ano_s):
     if pares_responsabilidades_diferentes:
         objetivo.append(1_000 * sum(pares_responsabilidades_diferentes))
 
+    # Penalização forte para o desequilíbrio nas horas de fim de semana
+    objetivo.append(-10_000 * desvio_hrs_fds)
+
     if penalizacoes_t_meio:
         objetivo.append(-5_000 * sum(penalizacoes_t_meio))
     if penalizacoes_folga_isolada:
@@ -921,12 +947,14 @@ def executar_gerador_escala(mes_s, ano_s):
         dados_escala = {}
         dados_meta_resps = {}
         totais_horas_realizadas = {}
+        horas_fds_realizadas = {}
         banco_horas = {}
 
         for trabalhador in trabalhadores:
             linha_trabalhador = []
             linha_meta_trabalhador = []
             horas_realizadas_trab = dias_ferias_por_trabalhador[trabalhador] * HORAS_DIA_FERIAS_LICENCA
+            horas_fds_trab = solver.Value(horas_fds_var[trabalhador]) / 10.0
 
             for dia in range(1, num_dias_m + 1):
                 pref_dia = ""
@@ -965,31 +993,33 @@ def executar_gerador_escala(mes_s, ano_s):
             saldo_banco = round(horas_realizadas_trab - hrs_contrato_mes, 1)
 
             totais_horas_realizadas[trabalhador] = horas_realizadas_trab
+            horas_fds_realizadas[trabalhador] = horas_fds_trab
             banco_horas[trabalhador] = saldo_banco
 
             s_banco = f"+{saldo_banco}h" if saldo_banco > 0 else f"{saldo_banco}h"
             
             linha_trabalhador.extend([
                 f"{round(horas_realizadas_trab, 1)}h",
+                f"{round(horas_fds_trab, 1)}h",
                 f"{hrs_contrato_mes}h",
                 s_banco
             ])
-            linha_meta_trabalhador.extend(["", "", ""])
+            linha_meta_trabalhador.extend(["", "", "", ""])
             
             dados_escala[trabalhador] = linha_trabalhador
             dados_meta_resps[trabalhador] = linha_meta_trabalhador
 
         colunas_dias = [str(dia) for dia in range(1, num_dias_m + 1)]
-        todas_colunas = colunas_dias + ["Horas Realizadas", "Alvo Contratual", "Banco de Horas"]
+        todas_colunas = colunas_dias + ["Horas Realizadas", "Horas Fim de Semana", "Alvo Contratual", "Banco de Horas"]
 
         df_resultado = pd.DataFrame.from_dict(dados_escala, orient="index", columns=todas_colunas)
         df_meta_resps = pd.DataFrame.from_dict(dados_meta_resps, orient="index", columns=todas_colunas)
 
-        # GUARDAR NO HISTÓRICO DO MÊS
         dados_m["escala_gerada"] = {
             "df_resultado": df_resultado,
             "df_meta_resps": df_meta_resps,
             "totais_horas_realizadas": totais_horas_realizadas,
+            "horas_fds_realizadas": horas_fds_realizadas,
             "banco_horas": banco_horas,
             "trabalhadores": trabalhadores
         }
@@ -1178,7 +1208,7 @@ with tabs[3]:
 # -----------------------------------------------------------------------------
 with tabs[4]:
     st.header(f"Escala Optimizada: {calendar.month_name[mes_sel].capitalize()} / {ano_sel}")
-    st.caption("Regras Ativas: Múltiplos turnos M12+T24; descanso noturno; máx. 5 dias seguidos; 1-2 fds livres; distribuição equitativa de turnos/responsabilidades; Turno T ao fim da sequência; folgas agrupadas (2 a 3) e distribuídas pelo mês.")
+    st.caption("Regras Ativas: Múltiplos turnos M12+T24; descanso noturno; máx. 5 dias seguidos; 1-2 fds livres; equidade de horas ao fim de semana; distribuição equitativa de turnos/responsabilidades; Turno T ao fim da sequência; folgas agrupadas.")
 
     escala_existente = dados_mes_atual.get("escala_gerada")
 
@@ -1203,18 +1233,17 @@ with tabs[4]:
                     st.success("Escala gerada com sucesso!")
                     st.rerun()
 
-    # RENDERIZAR ESCALA GUARDADA PARA O MÊS ATUAL
     if escala_existente is not None:
         df_resultado = escala_existente["df_resultado"]
         df_meta_resps = escala_existente["df_meta_resps"]
         banco_horas = escala_existente["banco_horas"]
         totais_horas_realizadas = escala_existente["totais_horas_realizadas"]
+        horas_fds_realizadas = escala_existente.get("horas_fds_realizadas", {})
         trabalhadores_escala = escala_existente["trabalhadores"]
 
         st.markdown("---")
         st.subheader(f"📋 Escala de {calendar.month_name[mes_sel].capitalize()} de {ano_sel}")
 
-        # Opções de Exportação e Impressão
         col_pdf, col_exp1, col_exp2 = st.columns([1, 1, 1])
 
         pdf_bytes = gerar_pdf_escala(df_resultado, df_meta_resps, mes_sel, ano_sel)
@@ -1255,9 +1284,14 @@ with tabs[4]:
         tabela_html = renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes_sel, ano_sel)
         st.markdown(tabela_html, unsafe_allow_html=True)
 
-        st.subheader("📊 Resumo do Banco de Horas da Equipa")
+        st.subheader("📊 Resumo de Horas e Banco de Horas da Equipa")
         cols_met = st.columns(min(len(trabalhadores_escala), 5))
         for idx_m, t_nome in enumerate(trabalhadores_escala[:5]):
             saldo = banco_horas[t_nome]
             s_str = f"+{saldo}h" if saldo > 0 else f"{saldo}h"
-            cols_met[idx_m].metric(label=t_nome, value=f"{totais_horas_realizadas[t_nome]}h", delta=s_str)
+            hrs_fds = horas_fds_realizadas.get(t_nome, 0.0)
+            cols_met[idx_m].metric(
+                label=t_nome,
+                value=f"{totais_horas_realizadas[t_nome]}h",
+                delta=f"FDS: {hrs_fds}h | Saldo: {s_str}"
+            )
