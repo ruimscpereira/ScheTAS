@@ -450,7 +450,7 @@ def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
 
 
 def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
-    """Gera um PDF exclusivo com o logotipo ULSRA, cabeçalho do serviço e título formatado."""
+    """Gera um PDF exclusivo com o logotipo ULSRA em proporção correta, cabeçalho do serviço e título formatado."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -491,7 +491,7 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
 
     elements = []
 
-    # 1. CONSTRUÇÃO DO CABEÇALHO (Serviço à Esquerda, Logótipo à Direita)
+    # 1. CONSTRUÇÃO DO CABEÇALHO (Serviço à Esquerda, Logótipo à Direita sem distorção)
     p_servico = Paragraph("<b>ULS Região de Aveiro</b><br/><font size=9 color='#4B5563'>Serviço de Imagiologia</font>", style_servico)
     
     logo_path = "logo_ulsra.png"
@@ -502,12 +502,13 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
                 break
 
     if os.path.exists(logo_path):
-        img_logo = RLImage(logo_path, width=130, height=38)
+        # preserveAspectRatio=True mantendo a proporção natural da imagem
+        img_logo = RLImage(logo_path, width=160, height=45, preserveAspectRatio=True)
     else:
         img_logo = Paragraph("<font size=8 color='#9CA3AF'>[Logótipo ULSRA]</font>", style_servico)
 
     header_table_data = [[p_servico, img_logo]]
-    header_table = Table(header_table_data, colWidths=[500, 312])
+    header_table = Table(header_table_data, colWidths=[450, 362])
     header_table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('ALIGN', (0, 0), (0, 0), 'LEFT'),
