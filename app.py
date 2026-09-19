@@ -442,17 +442,41 @@ with tabs[2]:
         slots_ordenados = turnos_ordenados(turnos_ativos)
         colunas_turnos = [chave_coluna_turno(slot) for slot in slots_ordenados]
         linhas_dias = [str(dia) for dia in range(1, num_dias + 1)]
+        
+        # Inicializar ou redefinir a tabela de necessidades quando altera o mês/ano/turnos
         if "df_necessidades" not in st.session_state or st.session_state.get("assinatura_necessidades") != assinatura_atual:
             st.session_state.df_necessidades = pd.DataFrame(0, index=linhas_dias, columns=colunas_turnos)
             st.session_state.assinatura_necessidades = assinatura_atual
 
         st.caption("Cada linha representa um dia. Introduza em cada coluna o número de pessoas necessárias para o turno indicado.")
+        
+        # Estilizar fins de semana mantendo o DataFrame base limpo
         necessidades_com_fins_de_semana = estilizar_fins_de_semana(st.session_state.df_necessidades, mes_sel, ano_sel, dias_nas_colunas=False)
-        st.session_state.df_necessidades = st.data_editor(necessidades_com_fins_de_semana, width="stretch", num_rows="fixed", column_config={chave_coluna_turno(slot): st.column_config.NumberColumn(f"{indicador_responsabilidade(slot.Responsabilidade)} {slot.Turno}", help=slot.Responsabilidade, min_value=0, step=1, format="%d") for slot in slots_ordenados})
+        
+        # data_editor com KEY própria para evitar a perda do primeiro clique/introdução
+        df_editado_nec = st.data_editor(
+            necessidades_com_fins_de_semana,
+            width="stretch",
+            num_rows="fixed",
+            key="editor_necessidades_mensais",
+            column_config={
+                chave_coluna_turno(slot): st.column_config.NumberColumn(
+                    f"{indicador_responsabilidade(slot.Responsabilidade)} {slot.Turno}",
+                    help=slot.Responsabilidade,
+                    min_value=0,
+                    step=1,
+                    format="%d"
+                ) for slot in slots_ordenados
+            }
+        )
+        
+        # Atualizar a variável de estado com os valores editados no ecrã
+        if isinstance(df_editado_nec, pd.DataFrame):
+            st.session_state.df_necessidades = df_editado_nec.copy()
         
         if st.button("💾 Guardar Necessidades Mensais"):
             guardar_estado_no_github()
-
+            
 # -----------------------------------------------------------------------------
 # TAB 4: INDISPONIBILIDADES E PREFERÊNCIAS
 # -----------------------------------------------------------------------------
