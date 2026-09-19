@@ -261,8 +261,6 @@ def opcoes_turnos_por_responsabilidade(df):
 
 
 def chave_ordenacao_personalizada(linha):
-    """Ordena estritamente por Responsabilidades (Radiologia Convencional -> Tomografia Computorizada -> Ressonância Magnética -> Ecografia)
-    e por Turnos internos (M3 -> T -> M12 -> M75 -> T24)."""
     try:
         idx_resp = ORDEM_RESPONSABILIDADES.index(linha.Responsabilidade)
     except ValueError:
@@ -465,7 +463,6 @@ def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
 
 
 def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
-    """Gera um PDF exclusivo com o logotipo ULSRA em proporção correta, cabeçalho do serviço e título formatado."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -771,10 +768,15 @@ def executar_gerador_escala(mes_s, ano_s):
             model.Add(sum(turnos_do_dia) >= 1).OnlyEnforceIf(trabalha_dia[(trabalhador, dia)])
             model.Add(sum(turnos_do_dia) == 0).OnlyEnforceIf(trabalha_dia[(trabalhador, dia)].Not())
 
+    # Restrição de competências e PROIBIÇÃO DE TURNOS DE 12H AO FIM DE SEMANA
     for trabalhador in trabalhadores:
         for dia in range(1, num_dias_m + 1):
+            is_fds = e_fim_de_semana(dia, mes_s, ano_s)
             for slot_index, slot in enumerate(slots):
                 if not trabalhador_pode_fazer(trabalhador, slot.Responsabilidade, slot.Turno):
+                    model.Add(escala[(trabalhador, dia, slot_index)] == 0)
+                # REGRA 1: Proibição de M12 e T24 aos fins de semana
+                if is_fds and e_turno_de_jornada_alargada(slot.Turno):
                     model.Add(escala[(trabalhador, dia, slot_index)] == 0)
 
     for trabalhador in trabalhadores:
@@ -825,6 +827,10 @@ def executar_gerador_escala(mes_s, ano_s):
     pares_jornada_por_trabalhador = {trabalhador: [] for trabalhador in trabalhadores}
     pares_jornada_preferidos = []
     pares_responsabilidades_diferentes = []
+    
+    # Variável para controlar os dias em que o trabalhador faz uma jornada de 12h
+    teve_jornada_12h = {}
+
     for trabalhador in trabalhadores:
         for dia in range(1, num_dias_m + 1):
             variaveis_m12 = [escala[(trabalhador, dia, slot_index)] for slot_index, slot in enumerate(slots) if slot.Turno == "M12"]
@@ -837,6 +843,7 @@ def executar_gerador_escala(mes_s, ano_s):
             model.Add(sum(variaveis_m12) + sum(variaveis_outros) <= 1)
             model.Add(sum(variaveis_t24) + sum(variaveis_outros) <= 1)
 
+            pares_do_dia = []
             for m12_index, m12_slot in enumerate(slots):
                 if m12_slot.Turno != "M12": continue
                 for t24_index, t24_slot in enumerate(slots):
@@ -849,14 +856,28 @@ def executar_gerador_escala(mes_s, ano_s):
                     model.Add(par >= m12_atribuido + t24_atribuido - 1)
                     pares_jornada.append(par)
                     pares_jornada_por_trabalhador[trabalhador].append(par)
+                    pares_do_dia.append(par)
                     if st.session_state.preferencias_jornadas_12h.get(trabalhador, False):
                         pares_jornada_preferidos.append(par)
                     if m12_slot.Responsabilidade != t24_slot.Responsabilidade:
                         pares_responsabilidades_diferentes.append(par)
 
+            # Define se neste dia houve jornada de 12h
+            v_dia_12h = model.NewBoolVar(f"teve_12h_{trabalhador}_{dia}")
+            if pares_do_dia:
+                model.Add(sum(pares_do_dia) == 1).OnlyEnforceIf(v_dia_12h)
+                model.Add(sum(pares_do_dia) == 0).OnlyEnforceIf(v_dia_12h.Not())
+            else:
+                model.Add(v_dia_12h == 0)
+            teve_jornada_12h[(trabalhador, dia)] = v_dia_12h
+
     for trabalhador in trabalhadores:
         limite_12h = max(0, int(st.session_state.limites_jornadas_12h.get(trabalhador, LIMITE_JORNADAS_12H_PADRAO)))
         model.Add(sum(pares_jornada_por_trabalhador[trabalhador]) <= limite_12h)
+
+        # REGRA 2: Distribuição dos turnos de 12h ao longo do mês (mínimo de 3 dias de intervalo entre jornadas de 12h)
+        for d in range(1, num_dias_m - 2):
+            model.Add(sum(teve_jornada_12h[(trabalhador, d + k)] for k in range(4)) <= 1)
 
     for dia in range(1, num_dias_m + 1):
         for slot_index, slot in enumerate(slots):
@@ -1183,7 +1204,7 @@ with tabs[1]:
         st.rerun()
 
 # -----------------------------------------------------------------------------
-# TAB 3: NECESSIDADES MENSAIS (ORDENAÇÃO RIGOROSA DE TURNOS E RESPONSABILIDADES)
+# TAB 3: NECESSIDADES MENSAIS
 # -----------------------------------------------------------------------------
 with tabs[2]:
     st.header(f"Necessidades do Mês: {calendar.month_name[mes_sel].capitalize()} / {ano_sel}")
@@ -1270,7 +1291,7 @@ with tabs[3]:
 # -----------------------------------------------------------------------------
 with tabs[4]:
     st.header(f"Escala Optimizada: {calendar.month_name[mes_sel].capitalize()} / {ano_sel}")
-    st.caption("Regras Ativas: Múltiplos turnos M12+T24; descanso noturno; máx. 5 dias seguidos; 1-2 fds livres; equidade de horas ao fim de semana; distribuição equitativa de turnos/responsabilidades; Turno T ao fim da sequência; folgas agrupadas.")
+    st.caption("Regras Ativas: Múltiplos turnos M12+T24 (apenas dias úteis e distribuídos ao longo do mês); descanso noturno; máx. 5 dias seguidos; 1-2 fds livres; equidade de horas ao fim de semana; distribuição equitativa de turnos/responsabilidades; Turno T ao fim da sequência; folgas agrupadas.")
 
     escala_existente = dados_mes_atual.get("escala_gerada")
 
