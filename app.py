@@ -211,7 +211,7 @@ if "confirmar_substituicao" not in st.session_state:
 # =============================================================================
 # SELETOR GLOBAL DE MÊS E ANO NO TOPO
 # =============================================================================
-st.title("🗓️ ScheTAS - Gestor Inteligente de Escalas de Trabalho - TAS Imagiologia")
+st.title("🗓️ ScheTAS - Gestor de Escalas de Trabalho - TAS Imagiologia")
 
 col_g1, col_g2, col_g3 = st.columns([2, 2, 4])
 with col_g1:
