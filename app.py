@@ -53,7 +53,7 @@ LIMITE_JORNADAS_12H_PADRAO = 31
 HORAS_CONTRATO_SEMANAL_PADRAO = 35.0
 HORAS_DIA_FERIAS_LICENCA = 7.0
 
-st.set_page_config(page_title="Gestor de Escalas de Trabalho", layout="wide")
+st.set_page_config(page_title="ScheTAS - Gestor de Escalas de Trabalho - TAS Imagiologia", layout="wide")
 
 # =============================================================================
 # PERSISTÊNCIA VIA GITHUB API POR MÊS
