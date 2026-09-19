@@ -37,10 +37,10 @@ DEFAULT_TURNOS = [
 ]
 
 RESPONSABILIDADE_CORES = {
-    "Radiologia Convencional": {"fundo": "#ffffff", "texto": "#2563eb", "hex": "2563EB"},
-    "Tomografia Computorizada": {"fundo": "#ffffff", "texto": "#16a34a", "hex": "16A34A"},
-    "Ressonância Magnética": {"fundo": "#ffffff", "texto": "#ea580c", "hex": "EA580C"},
-    "Ecografia": {"fundo": "#ffffff", "texto": "#dc2626", "hex": "DC2626"},
+    "Radiologia Convencional": {"fundo": "#eff6ff", "texto": "#2563eb", "hex": "2563EB"},
+    "Tomografia Computorizada": {"fundo": "#f0fdf4", "texto": "#16a34a", "hex": "16A34A"},
+    "Ressonância Magnética": {"fundo": "#fff7ed", "texto": "#ea580c", "hex": "EA580C"},
+    "Ecografia": {"fundo": "#fef2f2", "texto": "#dc2626", "hex": "DC2626"},
 }
 
 ORDEM_RESPONSABILIDADES = [
@@ -250,7 +250,6 @@ def opcoes_turnos_por_responsabilidade(df):
 
 
 def chave_ordenacao_personalizada(linha):
-    """Ordena rigorosamente as responsabilidades e turnos segundo os critérios indicados."""
     try:
         idx_resp = ORDEM_RESPONSABILIDADES.index(linha.Responsabilidade)
     except ValueError:
@@ -312,37 +311,6 @@ def calcular_duracao_turno_horas(inicio, fim):
 def dia_a_partir_do_rotulo(rotulo):
     correspondencia = re.match(r"^\D*(\d+)", str(rotulo))
     return int(correspondencia.group(1)) if correspondencia else None
-
-
-def estilizar_necessidades_com_cabecalhos_coloridos(df, slots_ordenados, mes, ano):
-    """Aplica o estilo visual dos fins de semana e pinta os textos dos cabeçalhos com a cor da responsabilidade."""
-    preenchimento = "#fff7ed"
-    borda_fim_de_semana = "#f59e0b"
-
-    def estilo_linha(linha):
-        dia = dia_a_partir_do_rotulo(linha.name)
-        fim_de_semana = dia is not None and e_fim_de_semana(dia, mes, ano)
-        return [f"background-color: {preenchimento}; border: 2px solid {borda_fim_de_semana};" if fim_de_semana else "" for _ in linha]
-
-    def estilo_indice_linhas(indice):
-        return [
-            f"font-weight: bold; background-color: #fff7ed; border-left: 4px solid {borda_fim_de_semana}; color: #9a3412;"
-            if (dia_a_partir_do_rotulo(rotulo) is not None and e_fim_de_semana(dia_a_partir_do_rotulo(rotulo), mes, ano))
-            else ""
-            for rotulo in indice
-        ]
-
-    # Mapeamento da cor do texto do cabeçalho para cada coluna
-    mapa_cores_colunas = {}
-    for slot in slots_ordenados:
-        chave_col = chave_coluna_turno(slot)
-        cor_hex = RESPONSABILIDADE_CORES.get(slot.Responsabilidade, {}).get("texto", "#111827")
-        mapa_cores_colunas[chave_col] = f"color: {cor_hex}; font-weight: bold;"
-
-    def estilo_cabecalho_colunas(indice):
-        return [mapa_cores_colunas.get(rotulo, "") for rotulo in indice]
-
-    return df.style.apply(estilo_linha, axis=1).apply_index(estilo_indice_linhas, axis=0).apply_index(estilo_cabecalho_colunas, axis=1)
 
 
 def estilizar_fins_de_semana(df, mes, ano, dias_nas_colunas):
@@ -475,7 +443,7 @@ def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
 
         html_code += "</tr>"
 
-    html_code += "tbody></table></div>"
+    html_code += "tbody></table>div>"
     return html_code
 
 
@@ -1198,7 +1166,7 @@ with tabs[1]:
         st.rerun()
 
 # -----------------------------------------------------------------------------
-# TAB 3: NECESSIDADES MENSAIS (CABEÇALHOS COLORIDOS E ORDENAÇÃO EXATA)
+# TAB 3: NECESSIDADES MENSAIS (COM CORES APLICADAS POR CSS DINÂMICO)
 # -----------------------------------------------------------------------------
 with tabs[2]:
     st.header(f"Necessidades do Mês: {calendar.month_name[mes_sel].capitalize()} / {ano_sel}")
@@ -1225,23 +1193,38 @@ with tabs[2]:
             df_nec_mes = df_nec_novo
             dados_mes_atual["df_necessidades"] = df_nec_mes
 
-        st.caption("Cada linha representa um dia. Os fins de semana surgem destacados a dourado e os nomes dos turnos surgem pintados com a cor do seu setor.")
+        st.caption("Cada linha representa um dia. Os fins de semana surgem destacados a dourado e os turnos dividem-se pelas respetivas cores de responsabilidade.")
         
-        necessidades_estilizadas = estilizar_necessidades_com_cabecalhos_coloridos(df_nec_mes, slots_ordenados, mes_sel, ano_sel)
+        # INJEÇÃO CSS PARA COLORIR OS CABEÇALHOS DAS COLUNAS DE ACORDO COM A RESPONSABILIDADE
+        css_cabecalhos = "<style>"
+        for i, slot in enumerate(slots_ordenados, start=2): # Start=2 porque a coluna do índice do dia é a 1
+            info_cor = RESPONSABILIDADE_CORES.get(slot.Responsabilidade, {"texto": "#111827", "fundo": "#f9fafb"})
+            css_cabecalhos += f"""
+            div[data-testid="stDataEditor"] table th:nth-child({i}) {{
+                color: {info_cor['texto']} !important;
+                background-color: {info_cor['fundo']} !important;
+                font-weight: bold !important;
+            }}
+            """
+        css_cabecalhos += "</style>"
+        st.markdown(css_cabecalhos, unsafe_allow_html=True)
+
+        necessidades_com_fins_de_semana = estilizar_fins_de_semana(df_nec_mes, mes_sel, ano_sel, dias_nas_colunas=False)
         
+        # Rótulo amigável: NOME DO TURNO + (ABREVIATURA DA RESPONSABILIDADE)
         configuracao_colunas = {}
         for slot in slots_ordenados:
-            rotulo_limpo = f"{slot.Turno} ({slot.Responsabilidade})"
+            rotulo_amigavel = f"{slot.Turno} ({slot.Responsabilidade})"
             configuracao_colunas[chave_coluna_turno(slot)] = st.column_config.NumberColumn(
-                label=rotulo_limpo,
-                help=f"{slot.Responsabilidade} — Turno {slot.Turno}",
+                label=rotulo_amigavel,
+                help=f"Setor: {slot.Responsabilidade} | Turno: {slot.Turno}",
                 min_value=0,
                 step=1,
                 format="%d"
             )
 
         df_editado_nec = st.data_editor(
-            necessidades_estilizadas,
+            necessidades_com_fins_de_semana,
             width="stretch",
             num_rows="fixed",
             key=f"editor_necessidades_{chave_mes_atual}",
