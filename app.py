@@ -50,11 +50,11 @@ RESPONSABILIDADE_INDICADORES = {
     "Ressonância Magnética": "🟠",
 }
 
-LIMITE_JORNADAS_12H_PADRAO = 31
+LIMITE_JORNADAS_12H_PADRAO = 2
 HORAS_CONTRATO_SEMANAL_PADRAO = 35.0
 HORAS_DIA_FERIAS_LICENCA = 7.0
 
-st.set_page_config(page_title="Gestor de Escalas de Trabalho", layout="wide")
+st.set_page_config(page_title="ScheTAS - Gestor de Escalas de Trabalho", layout="wide")
 
 # =============================================================================
 # PERSISTÊNCIA VIA GITHUB API POR MÊS
@@ -211,7 +211,7 @@ if "confirmar_substituicao" not in st.session_state:
 # =============================================================================
 # SELETOR GLOBAL DE MÊS E ANO NO TOPO
 # =============================================================================
-st.title("🗓️ Gestor Inteligente de Escalas de Trabalho")
+st.title("🗓️ ScheTAS - Gestor Inteligente de Escalas de Trabalho - TAS Imagiologia")
 
 col_g1, col_g2, col_g3 = st.columns([2, 2, 4])
 with col_g1:
