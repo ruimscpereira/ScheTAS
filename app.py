@@ -272,7 +272,6 @@ def estilizar_escala_final(df, mes, ano):
     def estilo_celula(val):
         val_str = str(val)
         
-        # Verificar cada responsabilidade
         for resp, cores in RESPONSABILIDADE_CORES.items():
             if resp in val_str:
                 return f"background-color: {cores['fundo']}; color: {cores['texto']}; font-weight: bold; border: 1px solid {cores['borda']};"
@@ -284,10 +283,11 @@ def estilizar_escala_final(df, mes, ano):
             
         return ""
 
-    # Aplicar cores por célula
-    styler = df.style.applymap(estilo_celula)
+    if hasattr(df.style, "map"):
+        styler = df.style.map(estilo_celula)
+    else:
+        styler = df.style.applymap(estilo_celula)
 
-    # Destacar fins de semana nos cabeçalhos
     borda_fds = "#f59e0b"
     def estilo_cabecalho(indice):
         estilos = []
@@ -783,7 +783,7 @@ with tabs[4]:
                 df_resultado = pd.DataFrame.from_dict(dados_escala, orient="index", columns=todas_colunas)
                 
                 # Exibir tabela estilizada com cores por responsabilidade
-                st.dataframe(estilizar_escala_final(df_resultado, mes_sel, ano_sel), width="stretch")
+                st.dataframe(estilizar_escala_final(df_resultado, mes_sel, ano_sel), use_container_width=True)
 
                 st.subheader("📊 Resumo do Banco de Horas da Equipa")
                 cols_met = st.columns(min(len(trabalhadores), 5))
