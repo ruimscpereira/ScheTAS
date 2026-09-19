@@ -213,6 +213,16 @@ def e_fim_de_semana(dia, mes, ano):
     return datetime(ano, mes, dia).weekday() >= 5
 
 
+def contar_dias_uteis_mes(mes, ano):
+    """Calcula quantos dias úteis (Segunda a Sexta-feira) existem no mês."""
+    num_dias = calendar.monthrange(ano, mes)[1]
+    dias_uteis = 0
+    for dia in range(1, num_dias + 1):
+        if not e_fim_de_semana(dia, mes, ano):
+            dias_uteis += 1
+    return dias_uteis
+
+
 def calcular_duracao_turno_horas(inicio, fim):
     try:
         h_inicio = datetime.strptime(inicio, "%H:%M")
@@ -529,6 +539,10 @@ with tabs[2]:
     mes_sel = col_mes.selectbox("Mês", list(range(1, 13)), index=datetime.now().month - 1)
     ano_sel = col_ano.number_input("Ano", min_value=2024, max_value=2030, value=datetime.now().year)
     num_dias = calendar.monthrange(ano_sel, mes_sel)[1]
+    dias_uteis_mes = contar_dias_uteis_mes(mes_sel, ano_sel)
+    
+    st.info(f"📅 **{calendar.month_name[mes_sel]} {ano_sel}**: Este mês tem **{dias_uteis_mes} dias úteis** (alvo base de **{dias_uteis_mes * 7}h** para um contrato de 35h/semana).")
+
     turnos_ativos = normalizar_turnos(st.session_state.turnos)
     assinatura_atual = ("dias_nas_linhas_numericos", mes_sel, ano_sel, assinatura_turnos(turnos_ativos))
 
@@ -617,6 +631,7 @@ with tabs[4]:
         else:
             slots = turnos_ordenados(turnos)
             duracoes_slots = [calcular_duracao_turno_horas(s.Início, s.Fim) for s in slots]
+            dias_uteis_mes = contar_dias_uteis_mes(mes_sel, ano_sel)
 
             model = cp_model.CpModel()
             escala = {}
@@ -746,11 +761,7 @@ with tabs[4]:
                             if hora_inicio < 12:
                                 model.Add(escala[(trabalhador, dia, slot_index)] + escala[(trabalhador, dia + 1, proximo_index)] <= 1)
 
-            # =============================================================================
-            # NOVAS REGRAS E OTIMIZAÇÕES
-            # =============================================================================
-            
-            # REGRA A: Turno 'T' (Tarde) ao Fim da Sequência de Trabalho
+            # 9. Regras de Otimização e Sequenciamento
             penalizacoes_t_meio = []
             for trabalhador in trabalhadores:
                 for dia in range(1, num_dias):
@@ -761,20 +772,15 @@ with tabs[4]:
                         model.Add(sum(turnos_t_dia) + trabalha_dia[(trabalhador, dia + 1)] < 2).OnlyEnforceIf(t_em_trabalho_seguido.Not())
                         penalizacoes_t_meio.append(t_em_trabalho_seguido)
 
-            # REGRA B: Agrupamento de Folgas (2 a 3 dias) e Distribuição ao Longo do Mês
             penalizacoes_folga_isolada = []
             for trabalhador in trabalhadores:
                 for dia in range(2, num_dias):
-                    # Folga isolada de 1 dia: Trabalha no dia-1, Folga no dia, Trabalha no dia+1
                     folga_1_dia = model.NewBoolVar(f"folga_isolada_{trabalhador}_{dia}")
                     model.Add(trabalha_dia[(trabalhador, dia - 1)] + trabalha_dia[(trabalhador, dia)].Not() + trabalha_dia[(trabalhador, dia + 1)] == 3).OnlyEnforceIf(folga_1_dia)
                     model.Add(trabalha_dia[(trabalhador, dia - 1)] + trabalha_dia[(trabalhador, dia)].Not() + trabalha_dia[(trabalhador, dia + 1)] < 3).OnlyEnforceIf(folga_1_dia.Not())
                     penalizacoes_folga_isolada.append(folga_1_dia)
 
-            # REGRA C: Equidade de Turnos e Responsabilidades entre Trabalhadores
             desvios_equidade = []
-            
-            # Equidade por Responsabilidade
             todas_resps = list({s.Responsabilidade for s in slots})
             for resp in todas_resps:
                 contagens_resp = []
@@ -792,7 +798,6 @@ with tabs[4]:
                 model.Add(diff_resp == max_resp - min_resp)
                 desvios_equidade.append(diff_resp)
 
-            # Equidade por Código de Turno
             todos_codigos = list({s.Turno for s in slots})
             for cod_t in todos_codigos:
                 contagens_cod = []
@@ -810,14 +815,15 @@ with tabs[4]:
                 model.Add(diff_cod == max_cod - min_cod)
                 desvios_equidade.append(diff_cod)
 
-            # 9. Cálculo do Balanço de Horas
+            # 10. Cálculo do Balanço de Horas por Dia Útil
             duracoes_int = [int(round(d * 10)) for d in duracoes_slots]
-            semanas_mes = num_dias / 7.0
 
             desvios_absolutos = []
             for trabalhador in trabalhadores:
                 hrs_semanais = float(st.session_state.horas_contrato_semanal.get(trabalhador, HORAS_CONTRATO_SEMANAL_PADRAO))
-                hrs_alvo_mes = hrs_semanais * semanas_mes
+                # Cálculo exato: (Horas Semanais / 5 dias úteis) * Dias Úteis no Mês
+                hrs_diarias_alvo = hrs_semanais / 5.0
+                hrs_alvo_mes = hrs_diarias_alvo * dias_uteis_mes
                 hrs_alvo_int = int(round(hrs_alvo_mes * 10))
 
                 horas_ferias_int = int(round(dias_ferias_por_trabalhador[trabalhador] * HORAS_DIA_FERIAS_LICENCA * 10))
@@ -837,7 +843,7 @@ with tabs[4]:
                 model.AddAbsEquality(desvio_abs, desvio_var)
                 desvios_absolutos.append(desvio_abs)
 
-            # 10. Função Objetivo Integrada
+            # 11. Função Objetivo Integrada
             objetivo = []
             if pares_jornada_preferidos:
                 objetivo.append(1_000_000 * sum(pares_jornada_preferidos))
@@ -847,7 +853,6 @@ with tabs[4]:
             if pares_responsabilidades_diferentes:
                 objetivo.append(1_000 * sum(pares_responsabilidades_diferentes))
 
-            # Penalizações para novas regras
             if penalizacoes_t_meio:
                 objetivo.append(-5_000 * sum(penalizacoes_t_meio))
             if penalizacoes_folga_isolada:
@@ -908,7 +913,8 @@ with tabs[4]:
                         linha_meta_trabalhador.append(meta_val)
 
                     hrs_contrato_sem = float(st.session_state.horas_contrato_semanal.get(trabalhador, HORAS_CONTRATO_SEMANAL_PADRAO))
-                    hrs_contrato_mes = round(hrs_contrato_sem * semanas_mes, 1)
+                    # Cálculo exato por dias úteis
+                    hrs_contrato_mes = round((hrs_contrato_sem / 5.0) * dias_uteis_mes, 1)
                     saldo_banco = round(horas_realizadas_trab - hrs_contrato_mes, 1)
 
                     totais_horas_realizadas[trabalhador] = horas_realizadas_trab
