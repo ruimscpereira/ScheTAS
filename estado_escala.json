@@ -3,15 +3,13 @@
     "Ana Silva",
     "Bruno Santos",
     "Carla Costa",
-    "Daniel Rocha",
-    "Eduarda Lima"
+    "Daniel Rocha"
   ],
   "trabalhadores_ativos": {
     "Ana Silva": true,
     "Bruno Santos": true,
     "Carla Costa": true,
-    "Daniel Rocha": true,
-    "Eduarda Lima": true
+    "Daniel Rocha": true
   },
   "preferencias_jornadas_12h": {
     "Ana Silva": false,
@@ -31,8 +29,7 @@
     "Ana Silva": 35.0,
     "Bruno Santos": 35.0,
     "Carla Costa": 35.0,
-    "Daniel Rocha": 35.0,
-    "Eduarda Lima": 35.0
+    "Daniel Rocha": 35.0
   },
   "competencias": {
     "Ana Silva": {
@@ -108,30 +105,6 @@
       ]
     },
     "Daniel Rocha": {
-      "Radiologia Convencional": [
-        "M3",
-        "T",
-        "M12",
-        "T24"
-      ],
-      "Tomografia Computorizada": [
-        "M3",
-        "T",
-        "M12",
-        "T24"
-      ],
-      "Ressonância Magnética": [
-        "M12",
-        "T24"
-      ],
-      "Ecografia": [
-        "M3",
-        "M75",
-        "M12",
-        "T24"
-      ]
-    },
-    "Eduarda Lima": {
       "Radiologia Convencional": [
         "M3",
         "T",
