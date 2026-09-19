@@ -503,7 +503,7 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
 
     if os.path.exists(logo_path):
         # preserveAspectRatio=True mantendo a proporção natural da imagem
-        img_logo = RLImage(logo_path, width=160, height=45, preserveAspectRatio=True)
+        img_logo = RLImage(logo_path, width=160, height=45, kind="proportional")
     else:
         img_logo = Paragraph("<font size=8 color='#9CA3AF'>[Logótipo ULSRA]</font>", style_servico)
 
