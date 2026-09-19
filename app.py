@@ -232,7 +232,7 @@ def dia_a_partir_do_rotulo(rotulo):
 
 
 def estilizar_fins_de_semana(df, mes, ano, dias_nas_colunas):
-    """Aplica o mesmo estilo de bordas e fundo laranja para fins de semana nos editores de tabelas."""
+    """Aplica estilo padronizado de bordas e fundo laranja para fins de semana."""
     preenchimento = "#fff7ed"
     borda_fim_de_semana = "#f59e0b"
     estilo_celula_fim_de_semana = f"background-color: {preenchimento}; border: 2px solid {borda_fim_de_semana};"
@@ -603,7 +603,7 @@ with tabs[3]:
 # -----------------------------------------------------------------------------
 with tabs[4]:
     st.header("Gerador de Escala Automática")
-    st.caption("Regras Ativas: Múltiplos turnos limitados a M12+T24; descanso noturno; máximo de 5 dias consecutivos; 1 a 2 fins de semana livres; contagem de 7h por dia de Férias (L); e alocação equitativa com Banco de Horas.")
+    st.caption("Regras Ativas: Múltiplos turnos M12+T24; descanso noturno; máx. 5 dias seguidos; 1-2 fds livres; distribuição equitativa de turnos/responsabilidades; Turno T ao fim da sequência; folgas agrupadas (2 a 3) e distribuídas pelo mês.")
     
     if st.button("⚡ Gerar Escala Optimizada", type="primary"):
         trabalhadores = [nome for nome in st.session_state.trabalhadores if st.session_state.trabalhadores_ativos.get(nome, True)]
@@ -746,6 +746,70 @@ with tabs[4]:
                             if hora_inicio < 12:
                                 model.Add(escala[(trabalhador, dia, slot_index)] + escala[(trabalhador, dia + 1, proximo_index)] <= 1)
 
+            # =============================================================================
+            # NOVAS REGRAS E OTIMIZAÇÕES
+            # =============================================================================
+            
+            # REGRA A: Turno 'T' (Tarde) ao Fim da Sequência de Trabalho
+            penalizacoes_t_meio = []
+            for trabalhador in trabalhadores:
+                for dia in range(1, num_dias):
+                    turnos_t_dia = [escala[(trabalhador, dia, s_idx)] for s_idx, s in enumerate(slots) if s.Turno == "T"]
+                    if turnos_t_dia:
+                        t_em_trabalho_seguido = model.NewBoolVar(f"t_in_middle_{trabalhador}_{dia}")
+                        model.Add(sum(turnos_t_dia) + trabalha_dia[(trabalhador, dia + 1)] == 2).OnlyEnforceIf(t_em_trabalho_seguido)
+                        model.Add(sum(turnos_t_dia) + trabalha_dia[(trabalhador, dia + 1)] < 2).OnlyEnforceIf(t_em_trabalho_seguido.Not())
+                        penalizacoes_t_meio.append(t_em_trabalho_seguido)
+
+            # REGRA B: Agrupamento de Folgas (2 a 3 dias) e Distribuição ao Longo do Mês
+            penalizacoes_folga_isolada = []
+            for trabalhador in trabalhadores:
+                for dia in range(2, num_dias):
+                    # Folga isolada de 1 dia: Trabalha no dia-1, Folga no dia, Trabalha no dia+1
+                    folga_1_dia = model.NewBoolVar(f"folga_isolada_{trabalhador}_{dia}")
+                    model.Add(trabalha_dia[(trabalhador, dia - 1)] + trabalha_dia[(trabalhador, dia)].Not() + trabalha_dia[(trabalhador, dia + 1)] == 3).OnlyEnforceIf(folga_1_dia)
+                    model.Add(trabalha_dia[(trabalhador, dia - 1)] + trabalha_dia[(trabalhador, dia)].Not() + trabalha_dia[(trabalhador, dia + 1)] < 3).OnlyEnforceIf(folga_1_dia.Not())
+                    penalizacoes_folga_isolada.append(folga_1_dia)
+
+            # REGRA C: Equidade de Turnos e Responsabilidades entre Trabalhadores
+            desvios_equidade = []
+            
+            # Equidade por Responsabilidade
+            todas_resps = list({s.Responsabilidade for s in slots})
+            for resp in todas_resps:
+                contagens_resp = []
+                for trabalhador in trabalhadores:
+                    slots_resp = [escala[(trabalhador, d, s_idx)] for d in range(1, num_dias + 1) for s_idx, s in enumerate(slots) if s.Responsabilidade == resp]
+                    var_c = model.NewIntVar(0, num_dias, f"count_resp_{resp}_{trabalhador}")
+                    model.Add(var_c == sum(slots_resp))
+                    contagens_resp.append(var_c)
+                
+                max_resp = model.NewIntVar(0, num_dias, f"max_resp_{resp}")
+                min_resp = model.NewIntVar(0, num_dias, f"min_resp_{resp}")
+                model.AddMaxEquality(max_resp, contagens_resp)
+                model.AddMinEquality(min_resp, contagens_resp)
+                diff_resp = model.NewIntVar(0, num_dias, f"diff_resp_{resp}")
+                model.Add(diff_resp == max_resp - min_resp)
+                desvios_equidade.append(diff_resp)
+
+            # Equidade por Código de Turno
+            todos_codigos = list({s.Turno for s in slots})
+            for cod_t in todos_codigos:
+                contagens_cod = []
+                for trabalhador in trabalhadores:
+                    slots_cod = [escala[(trabalhador, d, s_idx)] for d in range(1, num_dias + 1) for s_idx, s in enumerate(slots) if s.Turno == cod_t]
+                    var_c = model.NewIntVar(0, num_dias, f"count_cod_{cod_t}_{trabalhador}")
+                    model.Add(var_c == sum(slots_cod))
+                    contagens_cod.append(var_c)
+                
+                max_cod = model.NewIntVar(0, num_dias, f"max_cod_{cod_t}")
+                min_cod = model.NewIntVar(0, num_dias, f"min_cod_{cod_t}")
+                model.AddMaxEquality(max_cod, contagens_cod)
+                model.AddMinEquality(min_cod, contagens_cod)
+                diff_cod = model.NewIntVar(0, num_dias, f"diff_cod_{cod_t}")
+                model.Add(diff_cod == max_cod - min_cod)
+                desvios_equidade.append(diff_cod)
+
             # 9. Cálculo do Balanço de Horas
             duracoes_int = [int(round(d * 10)) for d in duracoes_slots]
             semanas_mes = num_dias / 7.0
@@ -773,7 +837,7 @@ with tabs[4]:
                 model.AddAbsEquality(desvio_abs, desvio_var)
                 desvios_absolutos.append(desvio_abs)
 
-            # 10. Função Objetivo
+            # 10. Função Objetivo Integrada
             objetivo = []
             if pares_jornada_preferidos:
                 objetivo.append(1_000_000 * sum(pares_jornada_preferidos))
@@ -782,6 +846,14 @@ with tabs[4]:
                 objetivo.append(50_000 * sum(todos_fds_livres))
             if pares_responsabilidades_diferentes:
                 objetivo.append(1_000 * sum(pares_responsabilidades_diferentes))
+
+            # Penalizações para novas regras
+            if penalizacoes_t_meio:
+                objetivo.append(-5_000 * sum(penalizacoes_t_meio))
+            if penalizacoes_folga_isolada:
+                objetivo.append(-3_000 * sum(penalizacoes_folga_isolada))
+            if desvios_equidade:
+                objetivo.append(-2_000 * sum(desvios_equidade))
 
             objetivo.append(-10 * sum(desvios_absolutos))
             model.Maximize(sum(objetivo))
