@@ -58,7 +58,6 @@ def guardar_estado_no_github():
         g = Github(st.secrets["GITHUB_TOKEN"])
         repo = g.get_repo(st.secrets["GITHUB_REPO"])
         
-        # Converter DataFrames para formatos serializáveis em JSON
         turnos_dict = st.session_state.turnos.to_dict(orient="records") if isinstance(st.session_state.turnos, pd.DataFrame) else []
         df_nec_dict = st.session_state.df_necessidades.to_dict(orient="split") if isinstance(st.session_state.get("df_necessidades"), pd.DataFrame) else None
         pref_dict = st.session_state.preferencias_turnos.to_dict(orient="split") if isinstance(st.session_state.get("preferencias_turnos"), pd.DataFrame) else None
@@ -121,12 +120,10 @@ def carregar_estado_do_github():
         return False
 
 
-# Carregamento Automático Inicial
 if "estado_carregado_github" not in st.session_state:
     carregar_estado_do_github()
     st.session_state.estado_carregado_github = True
 
-# Painel Lateral de Gravação
 with st.sidebar:
     st.title("💾 Controlo de Dados")
     if st.button("☁️ Guardar Tudo no GitHub", use_container_width=True, type="primary"):
@@ -137,7 +134,7 @@ with st.sidebar:
             st.rerun()
 
 # =============================================================================
-# INICIALIZAÇÃO DE ESTADOS BASE (CASO NÃO EXISTA NO GITHUB)
+# INICIALIZAÇÃO DE ESTADOS BASE
 # =============================================================================
 if "trabalhadores" not in st.session_state:
     st.session_state.trabalhadores = ["Ana Silva", "Bruno Santos", "Carla Costa", "Daniel Rocha", "Eduarda Lima"]
@@ -268,6 +265,41 @@ def estilizar_fins_de_semana(df, mes, ano, dias_nas_colunas):
         ]
 
     return df.style.apply(estilo_linha, axis=1).apply_index(estilo_indice_linhas, axis=0)
+
+
+def estilizar_escala_final(df, mes, ano):
+    """Aplica cores às células da escala final gerada de acordo com as responsabilidades."""
+    def estilo_celula(val):
+        val_str = str(val)
+        
+        # Verificar cada responsabilidade
+        for resp, cores in RESPONSABILIDADE_CORES.items():
+            if resp in val_str:
+                return f"background-color: {cores['fundo']}; color: {cores['texto']}; font-weight: bold; border: 1px solid {cores['borda']};"
+        
+        if val_str == "F":
+            return "background-color: #f3f4f6; color: #9ca3af; font-weight: normal;"
+        if val_str == "L":
+            return "background-color: #fef08a; color: #854d0e; font-weight: bold;"
+            
+        return ""
+
+    # Aplicar cores por célula
+    styler = df.style.applymap(estilo_celula)
+
+    # Destacar fins de semana nos cabeçalhos
+    borda_fds = "#f59e0b"
+    def estilo_cabecalho(indice):
+        estilos = []
+        for rotulo in indice:
+            dia = dia_a_partir_do_rotulo(rotulo)
+            if dia is not None and e_fim_de_semana(dia, mes, ano):
+                estilos.append(f"font-weight: bold; background-color: #fff7ed; border-bottom: 3px solid {borda_fds};")
+            else:
+                estilos.append("")
+        return estilos
+
+    return styler.apply_index(estilo_cabecalho, axis=1)
 
 
 def competencias_iniciais(df):
@@ -442,18 +474,13 @@ with tabs[2]:
         slots_ordenados = turnos_ordenados(turnos_ativos)
         colunas_turnos = [chave_coluna_turno(slot) for slot in slots_ordenados]
         linhas_dias = [str(dia) for dia in range(1, num_dias + 1)]
-        
-        # Inicializar ou redefinir a tabela de necessidades quando altera o mês/ano/turnos
         if "df_necessidades" not in st.session_state or st.session_state.get("assinatura_necessidades") != assinatura_atual:
             st.session_state.df_necessidades = pd.DataFrame(0, index=linhas_dias, columns=colunas_turnos)
             st.session_state.assinatura_necessidades = assinatura_atual
 
         st.caption("Cada linha representa um dia. Introduza em cada coluna o número de pessoas necessárias para o turno indicado.")
-        
-        # Estilizar fins de semana mantendo o DataFrame base limpo
         necessidades_com_fins_de_semana = estilizar_fins_de_semana(st.session_state.df_necessidades, mes_sel, ano_sel, dias_nas_colunas=False)
         
-        # data_editor com KEY própria para evitar a perda do primeiro clique/introdução
         df_editado_nec = st.data_editor(
             necessidades_com_fins_de_semana,
             width="stretch",
@@ -469,14 +496,12 @@ with tabs[2]:
                 ) for slot in slots_ordenados
             }
         )
-        
-        # Atualizar a variável de estado com os valores editados no ecrã
         if isinstance(df_editado_nec, pd.DataFrame):
             st.session_state.df_necessidades = df_editado_nec.copy()
-        
+            
         if st.button("💾 Guardar Necessidades Mensais"):
             guardar_estado_no_github()
-            
+
 # -----------------------------------------------------------------------------
 # TAB 4: INDISPONIBILIDADES E PREFERÊNCIAS
 # -----------------------------------------------------------------------------
@@ -495,7 +520,16 @@ with tabs[3]:
 
     opcoes_tabela = ["", "F", "L", *codigos_turno]
     preferencias_com_fins_de_semana = estilizar_fins_de_semana(st.session_state.preferencias_turnos, mes_sel, ano_sel, dias_nas_colunas=True)
-    st.session_state.preferencias_turnos = st.data_editor(preferencias_com_fins_de_semana, width="stretch", num_rows="fixed", column_config={dia: st.column_config.SelectboxColumn(dia, options=opcoes_tabela, required=False, help="Escolha F para folga, L para Licença/Férias (7h) ou um código de turno.") for dia in dias_do_mes}, key="editor_preferencias_turnos")
+    
+    df_editado_pref = st.data_editor(
+        preferencias_com_fins_de_semana,
+        width="stretch",
+        num_rows="fixed",
+        key="editor_preferencias_turnos",
+        column_config={dia: st.column_config.SelectboxColumn(dia, options=opcoes_tabela, required=False, help="Escolha F para folga, L para Licença/Férias (7h) ou um código de turno.") for dia in dias_do_mes}
+    )
+    if isinstance(df_editado_pref, pd.DataFrame):
+        st.session_state.preferencias_turnos = df_editado_pref.copy()
 
     if st.button("💾 Guardar Indisponibilidades e Férias"):
         guardar_estado_no_github()
@@ -747,7 +781,9 @@ with tabs[4]:
                 todas_colunas = colunas_dias + ["Horas Realizadas", "Alvo Contratual", "Banco de Horas"]
 
                 df_resultado = pd.DataFrame.from_dict(dados_escala, orient="index", columns=todas_colunas)
-                st.dataframe(estilizar_fins_de_semana(df_resultado, mes_sel, ano_sel, dias_nas_colunas=True), width="stretch")
+                
+                # Exibir tabela estilizada com cores por responsabilidade
+                st.dataframe(estilizar_escala_final(df_resultado, mes_sel, ano_sel), width="stretch")
 
                 st.subheader("📊 Resumo do Banco de Horas da Equipa")
                 cols_met = st.columns(min(len(trabalhadores), 5))
