@@ -7,7 +7,8 @@
     "Luísa Apresentação",
     "Maria Emilia Ribeiro",
     "Maria Martins Marques",
-    "Luciana Pinto"
+    "Luciana Pinto",
+    "Marlene Estevão"
   ],
   "trabalhadores_ativos": {
     "Fátima Silva": true,
@@ -17,7 +18,8 @@
     "Luísa Apresentação": true,
     "Maria Emilia Ribeiro": true,
     "Maria Martins Marques": true,
-    "Luciana Pinto": true
+    "Luciana Pinto": true,
+    "Marlene Estevão": true
   },
   "preferencias_jornadas_12h": {
     "Ana Silva": false,
@@ -32,7 +34,8 @@
     "Luísa Apresentação": false,
     "Maria Emilia Ribeiro": false,
     "Maria Martins Marques": true,
-    "Luciana Pinto": false
+    "Luciana Pinto": false,
+    "Marlene Estevão": true
   },
   "limites_jornadas_12h": {
     "Ana Silva": 31,
@@ -47,7 +50,8 @@
     "Luísa Apresentação": 2,
     "Maria Emilia Ribeiro": 4,
     "Maria Martins Marques": 6,
-    "Luciana Pinto": 4
+    "Luciana Pinto": 4,
+    "Marlene Estevão": 6
   },
   "horas_contrato_semanal": {
     "Fátima Silva": 35.0,
@@ -57,7 +61,8 @@
     "Luísa Apresentação": 35.0,
     "Maria Emilia Ribeiro": 35.0,
     "Maria Martins Marques": 35.0,
-    "Luciana Pinto": 35.0
+    "Luciana Pinto": 35.0,
+    "Marlene Estevão": 35.0
   },
   "competencias": {
     "Fátima Silva": {
@@ -203,6 +208,30 @@
       ]
     },
     "Luciana Pinto": {
+      "Radiologia Convencional": [
+        "M3",
+        "T",
+        "M12",
+        "T24"
+      ],
+      "Tomografia Computorizada": [
+        "M3",
+        "T",
+        "M12",
+        "T24"
+      ],
+      "Ressonância Magnética": [
+        "M12",
+        "T24"
+      ],
+      "Ecografia": [
+        "M3",
+        "M75",
+        "M12",
+        "T24"
+      ]
+    },
+    "Marlene Estevão": {
       "Radiologia Convencional": [
         "M3",
         "T",
@@ -853,7 +882,8 @@
       "Maria Helena Cardoso",
       "Luísa Apresentação",
       "Maria Emilia Ribeiro",
-      "Maria Martins Marques"
+      "Maria Martins Marques",
+      "Luciana Pinto"
     ],
     "columns": [
       "1",
@@ -888,6 +918,38 @@
       "30"
     ],
     "data": [
+      [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
       [
         "",
         "",
