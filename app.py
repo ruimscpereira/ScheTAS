@@ -1,11 +1,14 @@
 import calendar
 import html
+import io
 import json
 import re
 from datetime import datetime
 
 import pandas as pd
 import streamlit as st
+import openpyxl
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from github import Github
 from ortools.sat.python import cp_model
 
@@ -27,12 +30,12 @@ DEFAULT_TURNOS = [
     {"Responsabilidade": "Ecografia", "Turno": "T24", "Início": "14:00", "Fim": "20:00"},
 ]
 
-# Cores de texto vivas por responsabilidade
+# Cores de texto vivas por responsabilidade e hex para Excel
 RESPONSABILIDADE_CORES = {
-    "Radiologia Convencional": {"fundo": "#ffffff", "texto": "#2563eb", "borda": "#d1d5db"},     # Azul
-    "Tomografia Computorizada": {"fundo": "#ffffff", "texto": "#16a34a", "borda": "#d1d5db"},    # Verde
-    "Ecografia": {"fundo": "#ffffff", "texto": "#dc2626", "borda": "#d1d5db"},                   # Vermelho
-    "Ressonância Magnética": {"fundo": "#ffffff", "texto": "#ea580c", "borda": "#d1d5db"},      # Laranja
+    "Radiologia Convencional": {"fundo": "#ffffff", "texto": "#2563eb", "hex": "2563EB", "borda": "#d1d5db"},     # Azul
+    "Tomografia Computorizada": {"fundo": "#ffffff", "texto": "#16a34a", "hex": "16A34A", "borda": "#d1d5db"},    # Verde
+    "Ecografia": {"fundo": "#ffffff", "texto": "#dc2626", "hex": "DC2626", "borda": "#d1d5db"},                   # Vermelho
+    "Ressonância Magnética": {"fundo": "#ffffff", "texto": "#ea580c", "hex": "EA580C", "borda": "#d1d5db"},      # Laranja
 }
 
 RESPONSABILIDADE_INDICADORES = {
@@ -374,6 +377,94 @@ def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
 
     html_code += "tbody></table></div>"
     return html_code
+
+
+def gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes, ano):
+    """Gera um ficheiro Excel (.xlsx) pré-formatado com cores por setor e destaque de fim de semana."""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Escala {calendar.month_name[mes]} {ano}"
+
+    # Estilos Base
+    fill_header = PatternFill(start_color="F3F4F6", end_color="F3F4F6", fill_type="solid")
+    fill_header_fds = PatternFill(start_color="FFF7ED", end_color="FFF7ED", fill_type="solid")
+    fill_cell_fds = PatternFill(start_color="FFFDF2", end_color="FFFDF2", fill_type="solid")
+    fill_totals = PatternFill(start_color="F9FAFB", end_color="F9FAFB", fill_type="solid")
+
+    font_header = Font(name="Segoe UI", size=10, bold=True, color="374151")
+    font_header_fds = Font(name="Segoe UI", size=10, bold=True, color="9A3412")
+    font_trab = Font(name="Segoe UI", size=10, bold=True, color="111827")
+    font_f = Font(name="Segoe UI", size=10, bold=False, color="9CA3AF")
+    font_l = Font(name="Segoe UI", size=10, bold=True, color="D97706")
+    font_totals = Font(name="Segoe UI", size=10, bold=True, color="1F2937")
+
+    thin_border = Border(
+        left=Side(style="thin", color="E5E7EB"),
+        right=Side(style="thin", color="E5E7EB"),
+        top=Side(style="thin", color="E5E7EB"),
+        bottom=Side(style="thin", color="E5E7EB")
+    )
+    align_center = Alignment(horizontal="center", vertical="center")
+    align_left = Alignment(horizontal="left", vertical="center")
+
+    # Write Headers
+    headers = ["Trabalhador"] + list(df_resultado.columns)
+    ws.append(headers)
+
+    for col_idx, col_name in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx)
+        dia = dia_a_partir_do_rotulo(col_name)
+        if dia is not None and e_fim_de_semana(dia, mes, ano):
+            cell.fill = fill_header_fds
+            cell.font = font_header_fds
+        else:
+            cell.fill = fill_header
+            cell.font = font_header
+        cell.alignment = align_center if col_idx > 1 else align_left
+        cell.border = thin_border
+
+    # Write Data
+    for row_idx, trab in enumerate(df_resultado.index, 2):
+        ws.cell(row=row_idx, column=1, value=str(trab)).font = font_trab
+        ws.cell(row=row_idx, column=1).alignment = align_left
+        ws.cell(row=row_idx, column=1).border = thin_border
+
+        for col_idx, col_name in enumerate(df_resultado.columns, 2):
+            val = df_resultado.loc[trab, col_name]
+            cell = ws.cell(row=row_idx, column=col_idx, value=str(val))
+            cell.alignment = align_center
+            cell.border = thin_border
+
+            dia = dia_a_partir_do_rotulo(col_name)
+            is_fds = dia is not None and e_fim_de_semana(dia, mes, ano)
+            if is_fds:
+                cell.fill = fill_cell_fds
+
+            if col_name.isdigit():
+                meta_item = df_meta_resps.loc[trab, col_name]
+                if isinstance(meta_item, tuple):
+                    cell.font = Font(name="Segoe UI", size=10, bold=True, color="111827")
+                elif val == "F":
+                    cell.font = font_f
+                elif val == "L":
+                    cell.font = font_l
+                elif meta_item in RESPONSABILIDADE_CORES:
+                    hex_color = RESPONSABILIDADE_CORES[meta_item]["hex"]
+                    cell.font = Font(name="Segoe UI", size=10, bold=True, color=hex_color)
+            else:
+                cell.fill = fill_totals
+                cell.font = font_totals
+
+    # Adjust Column Widths
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or '')) for cell in col)
+        col_letter = openpyxl.utils.get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = max(max_len + 3, 6)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
 
 
 def competencias_iniciais(df):
@@ -821,7 +912,6 @@ with tabs[4]:
             desvios_absolutos = []
             for trabalhador in trabalhadores:
                 hrs_semanais = float(st.session_state.horas_contrato_semanal.get(trabalhador, HORAS_CONTRATO_SEMANAL_PADRAO))
-                # Cálculo exato: (Horas Semanais / 5 dias úteis) * Dias Úteis no Mês
                 hrs_diarias_alvo = hrs_semanais / 5.0
                 hrs_alvo_mes = hrs_diarias_alvo * dias_uteis_mes
                 hrs_alvo_int = int(round(hrs_alvo_mes * 10))
@@ -913,7 +1003,6 @@ with tabs[4]:
                         linha_meta_trabalhador.append(meta_val)
 
                     hrs_contrato_sem = float(st.session_state.horas_contrato_semanal.get(trabalhador, HORAS_CONTRATO_SEMANAL_PADRAO))
-                    # Cálculo exato por dias úteis
                     hrs_contrato_mes = round((hrs_contrato_sem / 5.0) * dias_uteis_mes, 1)
                     saldo_banco = round(horas_realizadas_trab - hrs_contrato_mes, 1)
 
@@ -957,7 +1046,28 @@ with tabs[4]:
                     s_str = f"+{saldo}h" if saldo > 0 else f"{saldo}h"
                     cols_met[idx_m].metric(label=t_nome, value=f"{totais_horas_realizadas[t_nome]}h", delta=s_str)
 
+                # Opções de Exportação
+                col_exp1, col_exp2 = st.columns(2)
+                
+                # Download em Excel (.xlsx)
+                excel_bytes = gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes_sel, ano_sel)
+                col_exp1.download_button(
+                    label="📊 Descarregar Escala Formatada (Excel .xlsx)",
+                    data=excel_bytes,
+                    file_name=f"escala_{mes_sel}_{ano_sel}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    type="primary"
+                )
+
+                # Download em CSV (.csv)
                 csv = df_resultado.to_csv().encode("utf-8")
-                st.download_button("📥 Descarregar Escala Completa (CSV)", csv, "escala_mensal.csv", "text/csv")
+                col_exp2.download_button(
+                    label="📥 Descarregar Escala Simples (CSV)",
+                    data=csv,
+                    file_name=f"escala_{mes_sel}_{ano_sel}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
             else:
                 st.error("Não foi possível encontrar uma solução válida com as restrições impostas. Tente reduzir as necessidades mensais ou ajustar as folgas/férias solicitadas.")
