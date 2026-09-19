@@ -7,7 +7,8 @@
     "Fátima Silva",
     "Carina Alves",
     "Clarisse Castro",
-    "Maria Helena Cardoso"
+    "Maria Helena Cardoso",
+    "Luísa Apresentação"
   ],
   "trabalhadores_ativos": {
     "Ana Silva": true,
@@ -17,7 +18,8 @@
     "Fátima Silva": true,
     "Carina Alves": true,
     "Clarisse Castro": true,
-    "Maria Helena Cardoso": true
+    "Maria Helena Cardoso": true,
+    "Luísa Apresentação": true
   },
   "preferencias_jornadas_12h": {
     "Ana Silva": false,
@@ -28,7 +30,8 @@
     "Fátima Silva": false,
     "Carina Alves": false,
     "Clarisse Castro": false,
-    "Maria Helena Cardoso": false
+    "Maria Helena Cardoso": false,
+    "Luísa Apresentação": false
   },
   "limites_jornadas_12h": {
     "Ana Silva": 31,
@@ -39,7 +42,8 @@
     "Fátima Silva": 2,
     "Carina Alves": 4,
     "Clarisse Castro": 4,
-    "Maria Helena Cardoso": 2
+    "Maria Helena Cardoso": 2,
+    "Luísa Apresentação": 2
   },
   "horas_contrato_semanal": {
     "Ana Silva": 35.0,
@@ -49,7 +53,8 @@
     "Fátima Silva": 35.0,
     "Carina Alves": 35.0,
     "Clarisse Castro": 35.0,
-    "Maria Helena Cardoso": 35.0
+    "Maria Helena Cardoso": 35.0,
+    "Luísa Apresentação": 35.0
   },
   "competencias": {
     "Ana Silva": {
@@ -213,6 +218,30 @@
         "T24"
       ],
       "Ecografia": [
+        "M75",
+        "M12",
+        "T24"
+      ]
+    },
+    "Luísa Apresentação": {
+      "Radiologia Convencional": [
+        "M3",
+        "T",
+        "M12",
+        "T24"
+      ],
+      "Tomografia Computorizada": [
+        "M3",
+        "T",
+        "M12",
+        "T24"
+      ],
+      "Ressonância Magnética": [
+        "M12",
+        "T24"
+      ],
+      "Ecografia": [
+        "M3",
         "M75",
         "M12",
         "T24"
@@ -845,7 +874,8 @@
       "Daniel Rocha",
       "Fátima Silva",
       "Carina Alves",
-      "Clarisse Castro"
+      "Clarisse Castro",
+      "Maria Helena Cardoso"
     ],
     "columns": [
       "1",
@@ -880,6 +910,38 @@
       "30"
     ],
     "data": [
+      [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
       [
         "",
         "",
