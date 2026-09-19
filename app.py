@@ -8,10 +8,15 @@ from datetime import datetime
 import openpyxl
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 from github import Github
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from ortools.sat.python import cp_model
+
+# Importações para geração de PDF nativo
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 
 DEFAULT_TURNOS = [
@@ -31,12 +36,11 @@ DEFAULT_TURNOS = [
     {"Responsabilidade": "Ecografia", "Turno": "T24", "Início": "14:00", "Fim": "20:00"},
 ]
 
-# Cores de texto vivas por responsabilidade e hex para Excel
 RESPONSABILIDADE_CORES = {
-    "Radiologia Convencional": {"fundo": "#ffffff", "texto": "#2563eb", "hex": "2563EB", "borda": "#d1d5db"},     # Azul
-    "Tomografia Computorizada": {"fundo": "#ffffff", "texto": "#16a34a", "hex": "16A34A", "borda": "#d1d5db"},    # Verde
-    "Ecografia": {"fundo": "#ffffff", "texto": "#dc2626", "hex": "DC2626", "borda": "#d1d5db"},                   # Vermelho
-    "Ressonância Magnética": {"fundo": "#ffffff", "texto": "#ea580c", "hex": "EA580C", "borda": "#d1d5db"},      # Laranja
+    "Radiologia Convencional": {"fundo": "#ffffff", "texto": "#2563eb", "hex": "2563EB", "reportlab": colors.HexColor("#2563eb")},
+    "Tomografia Computorizada": {"fundo": "#ffffff", "texto": "#16a34a", "hex": "16A34A", "reportlab": colors.HexColor("#16a34a")},
+    "Ecografia": {"fundo": "#ffffff", "texto": "#dc2626", "hex": "DC2626", "reportlab": colors.HexColor("#dc2626")},
+    "Ressonância Magnética": {"fundo": "#ffffff", "texto": "#ea580c", "hex": "EA580C", "reportlab": colors.HexColor("#ea580c")},
 }
 
 RESPONSABILIDADE_INDICADORES = {
@@ -284,33 +288,9 @@ def estilizar_fins_de_semana(df, mes, ano, dias_nas_colunas):
 
 
 def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
-    """Tabela final HTML padronizada com CSS de impressão nativo (@media print)."""
+    """Tabela final HTML para visualização no navegador."""
     html_code = f"""
     <style>
-        @media print {{
-            @page {{
-                size: A4 landscape;
-                margin: 8mm;
-            }}
-            body * {{
-                visibility: hidden;
-            }}
-            .printable-area, .printable-area * {{
-                visibility: visible;
-            }}
-            .printable-area {{
-                position: absolute;
-                left: 0;
-                top: 0;
-                width: 100%;
-            }}
-            .escala-table {{
-                font-size: 0.75rem !important;
-            }}
-            .escala-table th, .escala-table td {{
-                padding: 4px 3px !important;
-            }}
-        }}
         .escala-table-container {{
             overflow-x: auto;
             margin-top: 10px;
@@ -356,8 +336,6 @@ def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
         .res-col {{ font-weight: 600; background-color: #f3f4f6; }}
     </style>
 
-    <div class="printable-area">
-    <h2 style="margin-bottom: 5px;">Escala de Trabalho Mensal - {calendar.month_name[mes]} / {ano}</h2>
     <div class="escala-table-container">
     <table class="escala-table">
         <thead>
@@ -403,17 +381,157 @@ def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
 
         html_code += "</tr>"
 
-    html_code += "tbody></table></div></div>"
+    html_code += "tbody></table></div>"
     return html_code
 
 
+def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
+    """Gera um PDF exclusivo com o título e a tabela da escala em formato A4 Horizontal."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        rightMargin=15,
+        leftMargin=15,
+        topMargin=20,
+        bottomMargin=20
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'DocTitle',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=16,
+        leading=20,
+        alignment=1, # Centro
+        textColor=colors.HexColor('#111827'),
+        spaceAfter=15
+    )
+
+    cell_header_style = ParagraphStyle(
+        'CellHeader',
+        fontName='Helvetica-Bold',
+        fontSize=7,
+        leading=9,
+        alignment=1,
+        textColor=colors.HexColor('#374151')
+    )
+
+    cell_header_fds_style = ParagraphStyle(
+        'CellHeaderFDS',
+        fontName='Helvetica-Bold',
+        fontSize=7,
+        leading=9,
+        alignment=1,
+        textColor=colors.HexColor('#9A3412')
+    )
+
+    cell_body_style = ParagraphStyle(
+        'CellBody',
+        fontName='Helvetica',
+        fontSize=6.5,
+        leading=8,
+        alignment=1,
+        textColor=colors.HexColor('#111827')
+    )
+
+    cell_trab_style = ParagraphStyle(
+        'CellTrab',
+        fontName='Helvetica-Bold',
+        fontSize=7,
+        leading=9,
+        alignment=0,
+        textColor=colors.HexColor('#111827')
+    )
+
+    elements = []
+    
+    # 1. Título Limpo do PDF
+    nome_mes = calendar.month_name[mes].capitalize()
+    elements.append(Paragraph(f"Escala de Trabalho Mensal - {nome_mes} de {ano}", title_style))
+    elements.append(Spacer(1, 5))
+
+    # 2. Construir Matriz de Dados
+    headers = ["Trabalhador"] + list(df_resultado.columns)
+    table_data = []
+
+    # Linha do Cabeçalho
+    row_h = []
+    for col_name in headers:
+        dia = dia_a_partir_do_rotulo(col_name)
+        if dia is not None and e_fim_de_semana(dia, mes, ano):
+            row_h.append(Paragraph(col_name, cell_header_fds_style))
+        else:
+            row_h.append(Paragraph(col_name, cell_header_style))
+    table_data.append(row_h)
+
+    # Linhas dos Trabalhadores
+    for trab in df_resultado.index:
+        row = [Paragraph(html.escape(str(trab)), cell_trab_style)]
+        for col_name in df_resultado.columns:
+            val = df_resultado.loc[trab, col_name]
+            if col_name.isdigit():
+                meta_item = df_meta_resps.loc[trab, col_name]
+                if isinstance(meta_item, tuple):
+                    cods, resps = meta_item
+                    spans = []
+                    for c_code, r_resp in zip(cods, resps):
+                        hex_c = RESPONSABILIDADE_CORES.get(r_resp, {}).get("hex", "111827")
+                        spans.append(f'<font color="#{hex_c}"><b>{html.escape(c_code)}</b></font>')
+                    p_txt = " / ".join(spans)
+                elif val == "F":
+                    p_txt = '<font color="#9CA3AF">F</font>'
+                elif val == "L":
+                    p_txt = '<font color="#D97706"><b>L</b></font>'
+                elif meta_item in RESPONSABILIDADE_CORES:
+                    hex_c = RESPONSABILIDADE_CORES[meta_item]["hex"]
+                    p_txt = f'<font color="#{hex_c}"><b>{html.escape(str(val))}</b></font>'
+                else:
+                    p_txt = html.escape(str(val))
+                row.append(Paragraph(p_txt, cell_body_style))
+            else:
+                row.append(Paragraph(f"<b>{html.escape(str(val))}</b>", cell_body_style))
+        table_data.append(row)
+
+    # Estilização da Tabela no ReportLab
+    t_style = [
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F3F4F6')),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E5E7EB')),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LEFTPADDING', (0, 0), (-1, -1), 2),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+    ]
+
+    # Destaque de Fins de Semana
+    for c_idx, col_name in enumerate(headers):
+        dia = dia_a_partir_do_rotulo(col_name)
+        if dia is not None and e_fim_de_semana(dia, mes, ano):
+            t_style.append(('BACKGROUND', (c_idx, 0), (c_idx, 0), colors.HexColor('#FFF7ED')))
+            for r_idx in range(1, len(table_data)):
+                t_style.append(('BACKGROUND', (c_idx, r_idx), (c_idx, r_idx), colors.HexColor('#FFFDF2')))
+
+    # Larguras das colunas
+    col_widths = [75] + [(842 - 30 - 75) / len(df_resultado.columns)] * len(df_resultado.columns)
+    
+    table = Table(table_data, colWidths=col_widths, repeatRows=1)
+    table.setStyle(TableStyle(t_style))
+    elements.append(table)
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+
 def gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes, ano):
-    """Gera um ficheiro Excel (.xlsx) pré-formatado com cores por setor e destaque de fim de semana."""
+    """Gera um ficheiro Excel (.xlsx) pré-formatado."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = f"Escala {calendar.month_name[mes]} {ano}"
 
-    # Estilos Base
     fill_header = PatternFill(start_color="F3F4F6", end_color="F3F4F6", fill_type="solid")
     fill_header_fds = PatternFill(start_color="FFF7ED", end_color="FFF7ED", fill_type="solid")
     fill_cell_fds = PatternFill(start_color="FFFDF2", end_color="FFFDF2", fill_type="solid")
@@ -435,7 +553,6 @@ def gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes, ano):
     align_center = Alignment(horizontal="center", vertical="center")
     align_left = Alignment(horizontal="left", vertical="center")
 
-    # Headers
     headers = ["Trabalhador"] + list(df_resultado.columns)
     ws.append(headers)
 
@@ -451,7 +568,6 @@ def gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes, ano):
         cell.alignment = align_center if col_idx > 1 else align_left
         cell.border = thin_border
 
-    # Data
     for row_idx, trab in enumerate(df_resultado.index, 2):
         ws.cell(row=row_idx, column=1, value=str(trab)).font = font_trab
         ws.cell(row=row_idx, column=1).alignment = align_left
@@ -483,7 +599,6 @@ def gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes, ano):
                 cell.fill = fill_totals
                 cell.font = font_totals
 
-    # Widths
     for col in ws.columns:
         max_len = max(len(str(cell.value or '')) for cell in col)
         col_letter = openpyxl.utils.get_column_letter(col[0].column)
@@ -728,7 +843,7 @@ with tabs[3]:
     if isinstance(df_editado_pref, pd.DataFrame):
         st.session_state.preferencias_turnos = df_editado_pref.copy()
 
-    if st.button("💾 Guardar Indisponividades e Férias"):
+    if st.button("💾 Guardar Indisponibilidades e Férias"):
         guardar_estado_no_github()
 
 # -----------------------------------------------------------------------------
@@ -1055,31 +1170,19 @@ with tabs[4]:
                 df_resultado = pd.DataFrame.from_dict(dados_escala, orient="index", columns=todas_colunas)
                 df_meta_resps = pd.DataFrame.from_dict(dados_meta_resps, orient="index", columns=todas_colunas)
                 
-                # Botões de Impressão e Exportação
-                col_print, col_exp1, col_exp2 = st.columns([1, 1, 1])
+                # Opções de Exportação e Impressão
+                col_pdf, col_exp1, col_exp2 = st.columns([1, 1, 1])
 
-                # Botão HTML/JS nativo (não causa rerun no Streamlit)
-                with col_print:
-                    components.html(
-                        """
-                        <button onclick="window.parent.print()" style="
-                            width: 100%;
-                            background-color: #ff4b4b;
-                            color: white;
-                            padding: 9px 16px;
-                            border: none;
-                            border-radius: 8px;
-                            font-size: 16px;
-                            font-weight: 600;
-                            cursor: pointer;
-                            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-                        ">
-                            🖨️ Imprimir / Guardar em PDF
-                        </button>
-                        """,
-                        height=48,
-                    )
+                # Gerar PDF limpo (Exclusivo para Impressão)
+                pdf_bytes = gerar_pdf_escala(df_resultado, df_meta_resps, mes_sel, ano_sel)
+                col_pdf.download_button(
+                    label="📄 Descarregar Escala em PDF (Pronto a Imprimir)",
+                    data=pdf_bytes,
+                    file_name=f"escala_{mes_sel}_{ano_sel}.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                    type="primary"
+                )
 
                 # Exportar Excel
                 excel_bytes = gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes_sel, ano_sel)
