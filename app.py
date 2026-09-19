@@ -27,7 +27,7 @@ DEFAULT_TURNOS = [
     {"Responsabilidade": "Ecografia", "Turno": "T24", "Início": "14:00", "Fim": "20:00"},
 ]
 
-# Cores de texto vivas por responsabilidade (sem fundo colorido)
+# Cores de texto vivas por responsabilidade
 RESPONSABILIDADE_CORES = {
     "Radiologia Convencional": {"fundo": "#ffffff", "texto": "#2563eb", "borda": "#d1d5db"},     # Azul
     "Tomografia Computorizada": {"fundo": "#ffffff", "texto": "#16a34a", "borda": "#d1d5db"},    # Verde
@@ -232,6 +232,7 @@ def dia_a_partir_do_rotulo(rotulo):
 
 
 def estilizar_fins_de_semana(df, mes, ano, dias_nas_colunas):
+    """Aplica o mesmo estilo de bordas e fundo laranja para fins de semana nos editores de tabelas."""
     preenchimento = "#fff7ed"
     borda_fim_de_semana = "#f59e0b"
     estilo_celula_fim_de_semana = f"background-color: {preenchimento}; border: 2px solid {borda_fim_de_semana};"
@@ -244,7 +245,7 @@ def estilizar_fins_de_semana(df, mes, ano, dias_nas_colunas):
 
         def estilo_cabecalho_colunas(indice):
             return [
-                f"font-weight: bold; border: 2px solid {borda_fim_de_semana};"
+                f"font-weight: bold; background-color: #fff7ed; border-bottom: 3px solid {borda_fim_de_semana}; color: #9a3412;"
                 if (dia_a_partir_do_rotulo(rotulo) is not None and e_fim_de_semana(dia_a_partir_do_rotulo(rotulo), mes, ano))
                 else ""
                 for rotulo in indice
@@ -259,7 +260,7 @@ def estilizar_fins_de_semana(df, mes, ano, dias_nas_colunas):
 
     def estilo_indice_linhas(indice):
         return [
-            f"font-weight: bold; border: 2px solid {borda_fim_de_semana};"
+            f"font-weight: bold; background-color: #fff7ed; border-left: 4px solid {borda_fim_de_semana}; color: #9a3412;"
             if (dia_a_partir_do_rotulo(rotulo) is not None and e_fim_de_semana(dia_a_partir_do_rotulo(rotulo), mes, ano))
             else ""
             for rotulo in indice
@@ -269,7 +270,7 @@ def estilizar_fins_de_semana(df, mes, ano, dias_nas_colunas):
 
 
 def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
-    """Gera uma tabela HTML com fundo transparente e texto/números coloridos por responsabilidade."""
+    """Tabela final HTML padronizada com fins de semana destacados em tom dourado suave."""
     html_code = """
     <style>
         .escala-table-container {
@@ -298,6 +299,7 @@ def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
             background-color: #fff7ed;
             border-bottom: 3px solid #f59e0b;
             color: #9a3412;
+            font-weight: bold;
         }
         .escala-table td.fds-cell {
             background-color: #fffdfa;
@@ -309,6 +311,7 @@ def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
             position: sticky;
             left: 0;
             z-index: 1;
+            border-right: 2px solid #d1d5db;
         }
         .txt-f { color: #9ca3af; font-weight: normal; }
         .txt-l { color: #d97706; font-weight: bold; }
@@ -321,7 +324,6 @@ def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
                 <th class="nome-col">Trabalhador</th>
     """
 
-    num_dias = len([c for c in df_resultado.columns if c.isdigit()])
     for col in df_resultado.columns:
         dia = dia_a_partir_do_rotulo(col)
         if dia is not None and e_fim_de_semana(dia, mes, ano):
@@ -340,7 +342,6 @@ def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
 
             if col.isdigit():
                 meta_item = df_meta_resps.loc[trab, col]
-                # Se for um par de turnos (ex.: M12 / T24)
                 if isinstance(meta_item, tuple):
                     cods, resps = meta_item
                     spans = []
@@ -541,7 +542,7 @@ with tabs[2]:
             st.session_state.df_necessidades = pd.DataFrame(0, index=linhas_dias, columns=colunas_turnos)
             st.session_state.assinatura_necessidades = assinatura_atual
 
-        st.caption("Cada linha representa um dia. Introduza em cada coluna o número de pessoas necessárias para o turno indicado.")
+        st.caption("Cada linha representa um dia. Os fins de semana surgem destacados a dourado.")
         necessidades_com_fins_de_semana = estilizar_fins_de_semana(st.session_state.df_necessidades, mes_sel, ano_sel, dias_nas_colunas=False)
         
         df_editado_nec = st.data_editor(
@@ -859,7 +860,7 @@ with tabs[4]:
                 df_resultado = pd.DataFrame.from_dict(dados_escala, orient="index", columns=todas_colunas)
                 df_meta_resps = pd.DataFrame.from_dict(dados_meta_resps, orient="index", columns=todas_colunas)
                 
-                # Renderizar a Legenda das Cores do Texto por Responsabilidade
+                # Renderizar Legenda das Cores do Texto por Responsabilidade
                 st.markdown("### 🎨 Legenda dos Turnos por Setor")
                 legenda_html = "<div style='display:flex; gap:15px; flex-wrap:wrap; margin-bottom:15px;'>"
                 for resp, c_info in RESPONSABILIDADE_CORES.items():
@@ -867,7 +868,7 @@ with tabs[4]:
                 legenda_html += "</div>"
                 st.markdown(legenda_html, unsafe_allow_html=True)
 
-                # Renderizar a tabela final limpa
+                # Renderizar Tabela HTML Padronizada
                 tabela_html = renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes_sel, ano_sel)
                 st.markdown(tabela_html, unsafe_allow_html=True)
 
