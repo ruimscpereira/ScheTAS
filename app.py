@@ -768,14 +768,24 @@ def executar_gerador_escala(mes_s, ano_s):
             model.Add(sum(turnos_do_dia) >= 1).OnlyEnforceIf(trabalha_dia[(trabalhador, dia)])
             model.Add(sum(turnos_do_dia) == 0).OnlyEnforceIf(trabalha_dia[(trabalhador, dia)].Not())
 
-    # Restrição de competências e PROIBIÇÃO DE TURNOS DE 12H AO FIM DE SEMANA
+    # VERIFICAÇÃO DE INCOMPATIBILIDADE: M12/T24 AO FIM DE SEMANA
+    for dia in range(1, num_dias_m + 1):
+        if e_fim_de_semana(dia, mes_s, ano_s):
+            for slot_index, slot in enumerate(slots):
+                if e_turno_de_jornada_alargada(slot.Turno):
+                    coluna = chave_coluna_turno(slot)
+                    nec_fds = int(df_nec.loc[str(dia), coluna])
+                    if nec_fds > 0:
+                        st.error(f"⚠️ **Incompatibilidade detetada no Dia {dia} (Fim de Semana)**: Tem uma necessidade de {nec_fds} no turno **{slot.Turno} ({slot.Responsabilidade})**, mas os turnos de 12h estão **proibidos ao fim de semana**. Por favor, corrija as Necessidades na Tab 3.")
+                        return False
+
     for trabalhador in trabalhadores:
         for dia in range(1, num_dias_m + 1):
             is_fds = e_fim_de_semana(dia, mes_s, ano_s)
             for slot_index, slot in enumerate(slots):
                 if not trabalhador_pode_fazer(trabalhador, slot.Responsabilidade, slot.Turno):
                     model.Add(escala[(trabalhador, dia, slot_index)] == 0)
-                # REGRA 1: Proibição de M12 e T24 aos fins de semana
+                # Proibição rígida de M12/T24 ao fim de semana
                 if is_fds and e_turno_de_jornada_alargada(slot.Turno):
                     model.Add(escala[(trabalhador, dia, slot_index)] == 0)
 
@@ -828,7 +838,6 @@ def executar_gerador_escala(mes_s, ano_s):
     pares_jornada_preferidos = []
     pares_responsabilidades_diferentes = []
     
-    # Variável para controlar os dias em que o trabalhador faz uma jornada de 12h
     teve_jornada_12h = {}
 
     for trabalhador in trabalhadores:
@@ -862,7 +871,6 @@ def executar_gerador_escala(mes_s, ano_s):
                     if m12_slot.Responsabilidade != t24_slot.Responsabilidade:
                         pares_responsabilidades_diferentes.append(par)
 
-            # Define se neste dia houve jornada de 12h
             v_dia_12h = model.NewBoolVar(f"teve_12h_{trabalhador}_{dia}")
             if pares_do_dia:
                 model.Add(sum(pares_do_dia) == 1).OnlyEnforceIf(v_dia_12h)
@@ -875,9 +883,15 @@ def executar_gerador_escala(mes_s, ano_s):
         limite_12h = max(0, int(st.session_state.limites_jornadas_12h.get(trabalhador, LIMITE_JORNADAS_12H_PADRAO)))
         model.Add(sum(pares_jornada_por_trabalhador[trabalhador]) <= limite_12h)
 
-        # REGRA 2: Distribuição dos turnos de 12h ao longo do mês (mínimo de 3 dias de intervalo entre jornadas de 12h)
+    # REGRA DE DISTRIBUIÇÃO DAS JORNADAS DE 12H COMO PENALIZAÇÃO (SOFT CONSTRAINT)
+    # Penaliza a ocorrência de duas jornadas de 12h no mesmo colaborador em menos de 3 dias de diferença
+    penalizacoes_12h_proximas = []
+    for trabalhador in trabalhadores:
         for d in range(1, num_dias_m - 2):
-            model.Add(sum(teve_jornada_12h[(trabalhador, d + k)] for k in range(4)) <= 1)
+            v_proximas = model.NewBoolVar(f"proximas_12h_{trabalhador}_{d}")
+            model.Add(sum(teve_jornada_12h[(trabalhador, d + k)] for k in range(3)) >= 2).OnlyEnforceIf(v_proximas)
+            model.Add(sum(teve_jornada_12h[(trabalhador, d + k)] for k in range(3)) < 2).OnlyEnforceIf(v_proximas.Not())
+            penalizacoes_12h_proximas.append(v_proximas)
 
     for dia in range(1, num_dias_m + 1):
         for slot_index, slot in enumerate(slots):
@@ -1002,6 +1016,9 @@ def executar_gerador_escala(mes_s, ano_s):
         objetivo.append(50_000 * sum(todos_fds_livres))
     if pares_responsabilidades_diferentes:
         objetivo.append(1_000 * sum(pares_responsabilidades_diferentes))
+
+    if penalizacoes_12h_proximas:
+        objetivo.append(-20_000 * sum(penalizacoes_12h_proximas))
 
     objetivo.append(-10_000 * desvio_hrs_fds)
 
