@@ -5,7 +5,8 @@
     "Clarisse Castro",
     "Maria Helena Cardoso",
     "Luísa Apresentação",
-    "Maria Emilia Ribeiro"
+    "Maria Emilia Ribeiro",
+    "Maria Martins Marques"
   ],
   "trabalhadores_ativos": {
     "Fátima Silva": true,
@@ -13,7 +14,8 @@
     "Clarisse Castro": true,
     "Maria Helena Cardoso": true,
     "Luísa Apresentação": true,
-    "Maria Emilia Ribeiro": true
+    "Maria Emilia Ribeiro": true,
+    "Maria Martins Marques": true
   },
   "preferencias_jornadas_12h": {
     "Ana Silva": false,
@@ -26,7 +28,8 @@
     "Clarisse Castro": false,
     "Maria Helena Cardoso": false,
     "Luísa Apresentação": false,
-    "Maria Emilia Ribeiro": false
+    "Maria Emilia Ribeiro": false,
+    "Maria Martins Marques": true
   },
   "limites_jornadas_12h": {
     "Ana Silva": 31,
@@ -39,7 +42,8 @@
     "Clarisse Castro": 4,
     "Maria Helena Cardoso": 2,
     "Luísa Apresentação": 2,
-    "Maria Emilia Ribeiro": 4
+    "Maria Emilia Ribeiro": 4,
+    "Maria Martins Marques": 6
   },
   "horas_contrato_semanal": {
     "Fátima Silva": 35.0,
@@ -47,7 +51,8 @@
     "Clarisse Castro": 35.0,
     "Maria Helena Cardoso": 35.0,
     "Luísa Apresentação": 35.0,
-    "Maria Emilia Ribeiro": 35.0
+    "Maria Emilia Ribeiro": 35.0,
+    "Maria Martins Marques": 35.0
   },
   "competencias": {
     "Fátima Silva": {
@@ -145,6 +150,30 @@
       ]
     },
     "Maria Emilia Ribeiro": {
+      "Radiologia Convencional": [
+        "M3",
+        "T",
+        "M12",
+        "T24"
+      ],
+      "Tomografia Computorizada": [
+        "M3",
+        "T",
+        "M12",
+        "T24"
+      ],
+      "Ressonância Magnética": [
+        "M12",
+        "T24"
+      ],
+      "Ecografia": [
+        "M3",
+        "M75",
+        "M12",
+        "T24"
+      ]
+    },
+    "Maria Martins Marques": {
       "Radiologia Convencional": [
         "M3",
         "T",
@@ -793,7 +822,8 @@
       "Carina Alves",
       "Clarisse Castro",
       "Maria Helena Cardoso",
-      "Luísa Apresentação"
+      "Luísa Apresentação",
+      "Maria Emilia Ribeiro"
     ],
     "columns": [
       "1",
@@ -828,6 +858,38 @@
       "30"
     ],
     "data": [
+      [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
       [
         "",
         "",
