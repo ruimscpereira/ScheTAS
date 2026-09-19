@@ -27,11 +27,12 @@ DEFAULT_TURNOS = [
     {"Responsabilidade": "Ecografia", "Turno": "T24", "Início": "14:00", "Fim": "20:00"},
 ]
 
+# Cores de texto vivas por responsabilidade (sem fundo colorido)
 RESPONSABILIDADE_CORES = {
-    "Radiologia Convencional": {"fundo": "#dbeafe", "texto": "#1d4ed8", "borda": "#93c5fd"},
-    "Tomografia Computorizada": {"fundo": "#dcfce7", "texto": "#15803d", "borda": "#86efac"},
-    "Ecografia": {"fundo": "#fee2e2", "texto": "#b91c1c", "borda": "#fca5a5"},
-    "Ressonância Magnética": {"fundo": "#ffedd5", "texto": "#c2410c", "borda": "#fdba74"},
+    "Radiologia Convencional": {"fundo": "#ffffff", "texto": "#2563eb", "borda": "#d1d5db"},     # Azul
+    "Tomografia Computorizada": {"fundo": "#ffffff", "texto": "#16a34a", "borda": "#d1d5db"},    # Verde
+    "Ecografia": {"fundo": "#ffffff", "texto": "#dc2626", "borda": "#d1d5db"},                   # Vermelho
+    "Ressonância Magnética": {"fundo": "#ffffff", "texto": "#ea580c", "borda": "#d1d5db"},      # Laranja
 }
 
 RESPONSABILIDADE_INDICADORES = {
@@ -267,39 +268,101 @@ def estilizar_fins_de_semana(df, mes, ano, dias_nas_colunas):
     return df.style.apply(estilo_linha, axis=1).apply_index(estilo_indice_linhas, axis=0)
 
 
-def estilizar_escala_final(df, mes, ano):
-    """Aplica cores às células da escala final gerada de acordo com as responsabilidades."""
-    def estilo_celula(val):
-        val_str = str(val)
-        
-        for resp, cores in RESPONSABILIDADE_CORES.items():
-            if resp in val_str:
-                return f"background-color: {cores['fundo']}; color: {cores['texto']}; font-weight: bold; border: 1px solid {cores['borda']};"
-        
-        if val_str == "F":
-            return "background-color: #f3f4f6; color: #9ca3af; font-weight: normal;"
-        if val_str == "L":
-            return "background-color: #fef08a; color: #854d0e; font-weight: bold;"
-            
-        return ""
+def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
+    """Gera uma tabela HTML com fundo transparente e texto/números coloridos por responsabilidade."""
+    html_code = """
+    <style>
+        .escala-table-container {
+            overflow-x: auto;
+            margin-top: 10px;
+            margin-bottom: 25px;
+        }
+        .escala-table {
+            border-collapse: collapse;
+            width: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 0.88rem;
+            text-align: center;
+        }
+        .escala-table th, .escala-table td {
+            border: 1px solid #e5e7eb;
+            padding: 8px 6px;
+            white-space: nowrap;
+        }
+        .escala-table th {
+            background-color: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+        }
+        .escala-table th.fds-header {
+            background-color: #fff7ed;
+            border-bottom: 3px solid #f59e0b;
+            color: #9a3412;
+        }
+        .escala-table td.fds-cell {
+            background-color: #fffdfa;
+        }
+        .escala-table td.nome-col {
+            text-align: left;
+            font-weight: 600;
+            background-color: #f9fafb;
+            position: sticky;
+            left: 0;
+            z-index: 1;
+        }
+        .txt-f { color: #9ca3af; font-weight: normal; }
+        .txt-l { color: #d97706; font-weight: bold; }
+        .res-col { font-weight: 600; background-color: #f3f4f6; }
+    </style>
+    <div class="escala-table-container">
+    <table class="escala-table">
+        <thead>
+            <tr>
+                <th class="nome-col">Trabalhador</th>
+    """
 
-    if hasattr(df.style, "map"):
-        styler = df.style.map(estilo_celula)
-    else:
-        styler = df.style.applymap(estilo_celula)
+    num_dias = len([c for c in df_resultado.columns if c.isdigit()])
+    for col in df_resultado.columns:
+        dia = dia_a_partir_do_rotulo(col)
+        if dia is not None and e_fim_de_semana(dia, mes, ano):
+            html_code += f'<th class="fds-header">{col}</th>'
+        else:
+            html_code += f'<th>{col}</th>'
+    html_code += "</tr></thead><tbody>"
 
-    borda_fds = "#f59e0b"
-    def estilo_cabecalho(indice):
-        estilos = []
-        for rotulo in indice:
-            dia = dia_a_partir_do_rotulo(rotulo)
-            if dia is not None and e_fim_de_semana(dia, mes, ano):
-                estilos.append(f"font-weight: bold; background-color: #fff7ed; border-bottom: 3px solid {borda_fds};")
+    for trab in df_resultado.index:
+        html_code += f'<tr><td class="nome-col">{html.escape(str(trab))}</td>'
+        for col in df_resultado.columns:
+            val = df_resultado.loc[trab, col]
+            dia = dia_a_partir_do_rotulo(col)
+            is_fds = dia is not None and e_fim_de_semana(dia, mes, ano)
+            td_class = ' class="fds-cell"' if is_fds else ''
+
+            if col.isdigit():
+                meta_item = df_meta_resps.loc[trab, col]
+                # Se for um par de turnos (ex.: M12 / T24)
+                if isinstance(meta_item, tuple):
+                    cods, resps = meta_item
+                    spans = []
+                    for c_code, r_resp in zip(cods, resps):
+                        cor = RESPONSABILIDADE_CORES.get(r_resp, {}).get("texto", "#111827")
+                        spans.append(f'<span style="color:{cor}; font-weight:bold;">{html.escape(c_code)}</span>')
+                    celula_html = " / ".join(spans)
+                elif val in {"F", "L"}:
+                    cls_txt = "txt-f" if val == "F" else "txt-l"
+                    celula_html = f'<span class="{cls_txt}">{val}</span>'
+                else:
+                    cor = RESPONSABILIDADE_CORES.get(meta_item, {}).get("texto", "#111827")
+                    celula_html = f'<span style="color:{cor}; font-weight:bold;">{html.escape(str(val))}</span>'
+
+                html_code += f'<td{td_class}>{celula_html}</td>'
             else:
-                estilos.append("")
-        return estilos
+                html_code += f'<td class="res-col">{html.escape(str(val))}</td>'
 
-    return styler.apply_index(estilo_cabecalho, axis=1)
+        html_code += "</tr>"
+
+    html_code += "tbody></table></div>"
+    return html_code
 
 
 def competencias_iniciais(df):
@@ -317,11 +380,11 @@ def resumo_competencias_html(nome, numero=None):
     for responsabilidade, turnos in competencias.items():
         if not turnos:
             continue
-        cores = RESPONSABILIDADE_CORES.get(responsabilidade, {"fundo": "#f3f4f6", "texto": "#374151", "borda": "#d1d5db"})
+        cores = RESPONSABILIDADE_CORES.get(responsabilidade, {"fundo": "#ffffff", "texto": "#374151", "borda": "#d1d5db"})
         responsabilidade_segura = html.escape(responsabilidade)
         turnos_seguro = html.escape(", ".join(turnos))
         etiquetas.append(
-            f"<span style='display:inline-block; margin:3px 5px 3px 0; padding:4px 9px; border-radius:999px; background:{cores['fundo']}; border:1px solid {cores['borda']}; color:{cores['texto']}; font-size:0.82rem; line-height:1.25;'><strong>{responsabilidade_segura}</strong>: {turnos_seguro}</span>"
+            f"<span style='display:inline-block; margin:3px 5px 3px 0; padding:4px 9px; border-radius:999px; background:#f9fafb; border:1px solid #d1d5db; color:{cores['texto']}; font-size:0.82rem; line-height:1.25;'><strong>{responsabilidade_segura}</strong>: {turnos_seguro}</span>"
         )
 
     nome_seguro = html.escape(nome)
@@ -730,11 +793,13 @@ with tabs[4]:
             if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
                 st.success("Escala gerada com sucesso!")
                 dados_escala = {}
+                dados_meta_resps = {}
                 totais_horas_realizadas = {}
                 banco_horas = {}
 
                 for trabalhador in trabalhadores:
                     linha_trabalhador = []
+                    linha_meta_trabalhador = []
                     horas_realizadas_trab = dias_ferias_por_trabalhador[trabalhador] * HORAS_DIA_FERIAS_LICENCA
 
                     for dia in range(1, num_dias + 1):
@@ -745,22 +810,29 @@ with tabs[4]:
 
                         if pref_dia == "L":
                             linha_trabalhador.append("L")
+                            linha_meta_trabalhador.append("L")
                             continue
-                        elif pref_dia == "F":
-                            atribuicao = "F"
-                        else:
-                            atribuicao = "F"
 
-                        atribuicoes_do_dia = []
+                        codigos_do_dia = []
+                        resps_do_dia = []
                         for slot_index, slot in enumerate(slots):
                             if solver.Value(escala[(trabalhador, dia, slot_index)]):
-                                atribuicoes_do_dia.append(f"{slot.Responsabilidade}\n{slot.Turno}")
+                                codigos_do_dia.append(slot.Turno)
+                                resps_do_dia.append(slot.Responsabilidade)
                                 horas_realizadas_trab += duracoes_slots[slot_index]
 
-                        if atribuicoes_do_dia:
-                            atribuicao = "\n\n".join(atribuicoes_do_dia)
+                        if len(codigos_do_dia) > 1:
+                            atribuicao = " / ".join(codigos_do_dia)
+                            meta_val = (codigos_do_dia, resps_do_dia)
+                        elif len(codigos_do_dia) == 1:
+                            atribuicao = codigos_do_dia[0]
+                            meta_val = resps_do_dia[0]
+                        else:
+                            atribuicao = "F"
+                            meta_val = ""
 
                         linha_trabalhador.append(atribuicao)
+                        linha_meta_trabalhador.append(meta_val)
 
                     hrs_contrato_sem = float(st.session_state.horas_contrato_semanal.get(trabalhador, HORAS_CONTRATO_SEMANAL_PADRAO))
                     hrs_contrato_mes = round(hrs_contrato_sem * semanas_mes, 1)
@@ -770,20 +842,34 @@ with tabs[4]:
                     banco_horas[trabalhador] = saldo_banco
 
                     s_banco = f"+{saldo_banco}h" if saldo_banco > 0 else f"{saldo_banco}h"
+                    
                     linha_trabalhador.extend([
                         f"{round(horas_realizadas_trab, 1)}h",
                         f"{hrs_contrato_mes}h",
                         s_banco
                     ])
+                    linha_meta_trabalhador.extend(["", "", ""])
+                    
                     dados_escala[trabalhador] = linha_trabalhador
+                    dados_meta_resps[trabalhador] = linha_meta_trabalhador
 
                 colunas_dias = [str(dia) for dia in range(1, num_dias + 1)]
                 todas_colunas = colunas_dias + ["Horas Realizadas", "Alvo Contratual", "Banco de Horas"]
 
                 df_resultado = pd.DataFrame.from_dict(dados_escala, orient="index", columns=todas_colunas)
+                df_meta_resps = pd.DataFrame.from_dict(dados_meta_resps, orient="index", columns=todas_colunas)
                 
-                # Exibir tabela estilizada com cores por responsabilidade
-                st.dataframe(estilizar_escala_final(df_resultado, mes_sel, ano_sel), use_container_width=True)
+                # Renderizar a Legenda das Cores do Texto por Responsabilidade
+                st.markdown("### 🎨 Legenda dos Turnos por Setor")
+                legenda_html = "<div style='display:flex; gap:15px; flex-wrap:wrap; margin-bottom:15px;'>"
+                for resp, c_info in RESPONSABILIDADE_CORES.items():
+                    legenda_html += f"<span style='color:{c_info['texto']}; font-weight:bold; font-size:0.95rem; background:#f9fafb; padding:4px 10px; border-radius:6px; border:1px solid #e5e7eb;'>● {resp}</span>"
+                legenda_html += "</div>"
+                st.markdown(legenda_html, unsafe_allow_html=True)
+
+                # Renderizar a tabela final limpa
+                tabela_html = renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes_sel, ano_sel)
+                st.markdown(tabela_html, unsafe_allow_html=True)
 
                 st.subheader("📊 Resumo do Banco de Horas da Equipa")
                 cols_met = st.columns(min(len(trabalhadores), 5))
