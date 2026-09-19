@@ -1,6 +1,5 @@
 {
   "trabalhadores": [
-    "Ana Silva",
     "Bruno Santos",
     "Carla Costa",
     "Daniel Rocha",
@@ -11,7 +10,6 @@
     "Luísa Apresentação"
   ],
   "trabalhadores_ativos": {
-    "Ana Silva": true,
     "Bruno Santos": true,
     "Carla Costa": true,
     "Daniel Rocha": true,
@@ -46,7 +44,6 @@
     "Luísa Apresentação": 2
   },
   "horas_contrato_semanal": {
-    "Ana Silva": 35.0,
     "Bruno Santos": 35.0,
     "Carla Costa": 35.0,
     "Daniel Rocha": 35.0,
@@ -57,30 +54,6 @@
     "Luísa Apresentação": 35.0
   },
   "competencias": {
-    "Ana Silva": {
-      "Radiologia Convencional": [
-        "M3",
-        "T",
-        "M12",
-        "T24"
-      ],
-      "Tomografia Computorizada": [
-        "M3",
-        "T",
-        "M12",
-        "T24"
-      ],
-      "Ressonância Magnética": [
-        "M12",
-        "T24"
-      ],
-      "Ecografia": [
-        "M3",
-        "M75",
-        "M12",
-        "T24"
-      ]
-    },
     "Bruno Santos": {
       "Radiologia Convencional": [
         "M3",
@@ -875,7 +848,8 @@
       "Fátima Silva",
       "Carina Alves",
       "Clarisse Castro",
-      "Maria Helena Cardoso"
+      "Maria Helena Cardoso",
+      "Luísa Apresentação"
     ],
     "columns": [
       "1",
@@ -910,6 +884,38 @@
       "30"
     ],
     "data": [
+      [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        ""
+      ],
       [
         "",
         "",
