@@ -37,18 +37,20 @@ DEFAULT_TURNOS = [
 ]
 
 RESPONSABILIDADE_CORES = {
-    "Radiologia Convencional": {"fundo": "#ffffff", "texto": "#2563eb", "hex": "2563EB"},
-    "Tomografia Computorizada": {"fundo": "#ffffff", "texto": "#16a34a", "hex": "16A34A"},
-    "Ecografia": {"fundo": "#ffffff", "texto": "#dc2626", "hex": "DC2626"},
-    "Ressonância Magnética": {"fundo": "#ffffff", "texto": "#ea580c", "hex": "EA580C"},
+    "Radiologia Convencional": {"fundo": "#eff6ff", "texto": "#2563eb", "hex": "2563EB"},
+    "Tomografia Computorizada": {"fundo": "#f0fdf4", "texto": "#16a34a", "hex": "16A34A"},
+    "Ressonância Magnética": {"fundo": "#fff7ed", "texto": "#ea580c", "hex": "EA580C"},
+    "Ecografia": {"fundo": "#fef2f2", "texto": "#dc2626", "hex": "DC2626"},
 }
 
-RESPONSABILIDADE_INDICADORES = {
-    "Radiologia Convencional": "🔵",
-    "Tomografia Computorizada": "🟢",
-    "Ecografia": "🔴",
-    "Ressonância Magnética": "🟠",
-}
+ORDEM_RESPONSABILIDADES = [
+    "Radiologia Convencional",
+    "Tomografia Computorizada",
+    "Ressonância Magnética",
+    "Ecografia"
+]
+
+ORDEM_TURNOS_INTERNA = ["M3", "T", "M12", "M75", "T24"]
 
 LIMITE_JORNADAS_12H_PADRAO = 31
 HORAS_CONTRATO_SEMANAL_PADRAO = 35.0
@@ -240,10 +242,6 @@ def normalizar_turnos(df):
     return resultado.drop_duplicates(subset=["Responsabilidade", "Turno"], keep="last").reset_index(drop=True)
 
 
-def assinatura_turnos(df):
-    return tuple(tuple(linha) for linha in normalizar_turnos(df).itertuples(index=False, name=None))
-
-
 def opcoes_turnos_por_responsabilidade(df):
     resultado = {}
     for linha in normalizar_turnos(df).itertuples(index=False):
@@ -251,20 +249,26 @@ def opcoes_turnos_por_responsabilidade(df):
     return resultado
 
 
-def chave_ordenacao_turno(codigo):
-    correspondencia = re.match(r"^([A-Za-z]+)(\d*)$", codigo.strip())
-    if not correspondencia:
-        return (2, codigo.lower(), -1)
-    tipo, numero = correspondencia.groups()
-    ordem_tipo = {"M": 0, "T": 1}.get(tipo.upper(), 2)
-    ordem_numero = int(numero) if numero else -1
-    return (ordem_tipo, tipo.lower(), ordem_numero)
+def chave_ordenacao_personalizada(linha):
+    """Ordenação rigorosa: Responsabilidades (Radiologia Convencional -> Tomografia Computorizada -> Ressonância Magnética -> Ecografia)
+    e Turnos internos (M3 -> T -> M12 -> M75 -> T24)."""
+    try:
+        idx_resp = ORDEM_RESPONSABILIDADES.index(linha.Responsabilidade)
+    except ValueError:
+        idx_resp = 99
+        
+    try:
+        idx_turno = ORDEM_TURNOS_INTERNA.index(linha.Turno)
+    except ValueError:
+        idx_turno = 99
+        
+    return (idx_resp, linha.Responsabilidade.lower(), idx_turno, linha.Turno.lower())
 
 
 def turnos_ordenados(df):
     return sorted(
         normalizar_turnos(df).itertuples(index=False),
-        key=lambda linha: (chave_ordenacao_turno(linha.Turno), linha.Responsabilidade.lower()),
+        key=chave_ordenacao_personalizada
     )
 
 
@@ -278,10 +282,6 @@ def codigos_turno_ordenados(df):
 
 def chave_coluna_turno(slot):
     return f"{slot.Responsabilidade} | {slot.Turno}"
-
-
-def indicador_responsabilidade(responsabilidade):
-    return RESPONSABILIDADE_INDICADORES.get(responsabilidade, "⚪")
 
 
 def e_fim_de_semana(dia, mes, ano):
@@ -469,7 +469,7 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
         fontName='Helvetica-Bold',
         fontSize=11,
         leading=14,
-        alignment=0, # Esquerda
+        alignment=0,
         textColor=colors.HexColor('#1E3A8A')
     )
 
@@ -479,7 +479,7 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
         fontName='Helvetica-Bold',
         fontSize=15,
         leading=18,
-        alignment=1, # Centro
+        alignment=1,
         textColor=colors.HexColor('#111827'),
         spaceAfter=12
     )
@@ -491,7 +491,6 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
 
     elements = []
 
-    # 1. CONSTRUÇÃO DO CABEÇALHO (Serviço à Esquerda, Logótipo à Direita sem distorção)
     p_servico = Paragraph("<b>ULS Região de Aveiro</b><br/><font size=9 color='#4B5563'>Serviço de Imagiologia</font>", style_servico)
     
     logo_path = "logo_ulsra.png"
@@ -502,7 +501,6 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
                 break
 
     if os.path.exists(logo_path):
-        # Utiliza kind="proportional" para manter a proporção correta no ReportLab
         img_logo = RLImage(logo_path, width=160, height=45, kind="proportional")
     else:
         img_logo = Paragraph("<font size=8 color='#9CA3AF'>[Logótipo ULSRA]</font>", style_servico)
@@ -521,12 +519,10 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
     elements.append(header_table)
     elements.append(Spacer(1, 4))
 
-    # 2. TÍTULO ATUALIZADO
     nome_mes = calendar.month_name[mes].capitalize()
     elements.append(Paragraph(f"Escala de Trabalho Mensal - TAS - {nome_mes} {ano}", style_titulo))
     elements.append(Spacer(1, 4))
 
-    # 3. MATRIZ DA TABELA DA ESCALA
     headers = ["Trabalhador"] + list(df_resultado.columns)
     table_data = []
 
@@ -1172,7 +1168,7 @@ with tabs[1]:
         st.rerun()
 
 # -----------------------------------------------------------------------------
-# TAB 3: NECESSIDADES MENSAIS
+# TAB 3: NECESSIDADES MENSAIS (COM ORDENAÇÃO E CORES GARANTIDAS)
 # -----------------------------------------------------------------------------
 with tabs[2]:
     st.header(f"Necessidades do Mês: {calendar.month_name[mes_sel].capitalize()} / {ano_sel}")
@@ -1184,32 +1180,63 @@ with tabs[2]:
     if turnos_ativos.empty:
         st.warning("Adicione responsabilidades e turnos na Tab 2 primeiro.")
     else:
+        # Obter os slots ordenados rigorosamente
         slots_ordenados = turnos_ordenados(turnos_ativos)
         colunas_turnos = [chave_coluna_turno(slot) for slot in slots_ordenados]
         linhas_dias = [str(dia) for dia in range(1, num_dias + 1)]
 
         df_nec_mes = dados_mes_atual.get("df_necessidades")
-        if not isinstance(df_nec_mes, pd.DataFrame) or df_nec_mes.shape != (num_dias, len(colunas_turnos)):
-            df_nec_mes = pd.DataFrame(0, index=linhas_dias, columns=colunas_turnos)
-            dados_mes_atual["df_necessidades"] = df_nec_mes
+        
+        # Garante a criação e a reordenação estrita das colunas da matriz
+        if not isinstance(df_nec_mes, pd.DataFrame) or list(df_nec_mes.columns) != colunas_turnos or len(df_nec_mes) != num_dias:
+            df_nec_novo = pd.DataFrame(0, index=linhas_dias, columns=colunas_turnos)
+            if isinstance(df_nec_mes, pd.DataFrame):
+                for col in colunas_turnos:
+                    if col in df_nec_mes.columns:
+                        df_nec_novo[col] = df_nec_mes[col]
+            df_nec_mes = df_nec_novo
+        else:
+            # Reordena explicitamente para garantir que cumpre o padrão estipulado
+            df_nec_mes = df_nec_mes.reindex(columns=colunas_turnos)
 
-        st.caption("Cada linha representa um dia. Os fins de semana surgem destacados a dourado.")
+        dados_mes_atual["df_necessidades"] = df_nec_mes
+
+        st.caption("Cada linha representa um dia. Os fins de semana surgem destacados a dourado e os turnos dividem-se pelas respetivas cores de responsabilidade.")
+        
+        # INJEÇÃO CSS PARA COLORIR OS CABEÇALHOS DAS COLUNAS DE ACORDO COM A RESPONSABILIDADE
+        css_cabecalhos = "<style>"
+        for i, slot in enumerate(slots_ordenados, start=2): # Start=2 porque a coluna do índice do dia é a 1
+            info_cor = RESPONSABILIDADE_CORES.get(slot.Responsabilidade, {"texto": "#111827", "fundo": "#f9fafb"})
+            css_cabecalhos += f"""
+            div[data-testid="stDataEditor"] table th:nth-child({i}) {{
+                color: {info_cor['texto']} !important;
+                background-color: {info_cor['fundo']} !important;
+                font-weight: bold !important;
+            }}
+            """
+        css_cabecalhos += "</style>"
+        st.markdown(css_cabecalhos, unsafe_allow_html=True)
+
         necessidades_com_fins_de_semana = estilizar_fins_de_semana(df_nec_mes, mes_sel, ano_sel, dias_nas_colunas=False)
         
+        # Rótulo limpo: CÓDIGO DO TURNO + (RESPONSABILIDADE)
+        configuracao_colunas = {}
+        for slot in slots_ordenados:
+            rotulo_amigavel = f"{slot.Turno} ({slot.Responsabilidade})"
+            configuracao_colunas[chave_coluna_turno(slot)] = st.column_config.NumberColumn(
+                label=rotulo_amigavel,
+                help=f"Setor: {slot.Responsabilidade} | Turno: {slot.Turno}",
+                min_value=0,
+                step=1,
+                format="%d"
+            )
+
         df_editado_nec = st.data_editor(
             necessidades_com_fins_de_semana,
             width="stretch",
             num_rows="fixed",
             key=f"editor_necessidades_{chave_mes_atual}",
-            column_config={
-                chave_coluna_turno(slot): st.column_config.NumberColumn(
-                    f"{indicador_responsabilidade(slot.Responsabilidade)} {slot.Turno}",
-                    help=slot.Responsabilidade,
-                    min_value=0,
-                    step=1,
-                    format="%d"
-                ) for slot in slots_ordenados
-            }
+            column_config=configuracao_colunas
         )
         if isinstance(df_editado_nec, pd.DataFrame):
             dados_mes_atual["df_necessidades"] = df_editado_nec.copy()
@@ -1320,15 +1347,16 @@ with tabs[4]:
 
         st.markdown("### 🎨 Legenda dos Turnos por Setor")
         legenda_html = "<div style='display:flex; gap:15px; flex-wrap:wrap; margin-bottom:15px;'>"
-        for resp, c_info in RESPONSABILIDADE_CORES.items():
-            legenda_html += f"<span style='color:{c_info['texto']}; font-weight:bold; font-size:0.95rem; background:#f9fafb; padding:4px 10px; border-radius:6px; border:1px solid #e5e7eb;'>● {resp}</span>"
+        for resp in ORDEM_RESPONSABILIDADES:
+            if resp in RESPONSABILIDADE_CORES:
+                c_info = RESPONSABILIDADE_CORES[resp]
+                legenda_html += f"<span style='color:{c_info['texto']}; font-weight:bold; font-size:0.95rem; background:#f9fafb; padding:4px 10px; border-radius:6px; border:1px solid #e5e7eb;'>● {resp}</span>"
         legenda_html += "</div>"
         st.markdown(legenda_html, unsafe_allow_html=True)
 
         tabela_html = renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes_sel, ano_sel)
         st.markdown(tabela_html, unsafe_allow_html=True)
 
-        # CÁLCULO DOS INDICADORES GLOBAIS DA EQUIPA
         num_colabs = len(trabalhadores_escala)
         if num_colabs > 0:
             total_horas_equipa = sum(totais_horas_realizadas.values())
