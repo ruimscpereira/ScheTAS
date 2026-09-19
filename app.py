@@ -37,10 +37,10 @@ DEFAULT_TURNOS = [
 ]
 
 RESPONSABILIDADE_CORES = {
-    "Radiologia Convencional": {"fundo": "#ffffff", "texto": "#2563eb", "hex": "2563EB", "reportlab": colors.HexColor("#2563eb")},
-    "Tomografia Computorizada": {"fundo": "#ffffff", "texto": "#16a34a", "hex": "16A34A", "reportlab": colors.HexColor("#16a34a")},
-    "Ecografia": {"fundo": "#ffffff", "texto": "#dc2626", "hex": "DC2626", "reportlab": colors.HexColor("#dc2626")},
-    "Ressonância Magnética": {"fundo": "#ffffff", "texto": "#ea580c", "hex": "EA580C", "reportlab": colors.HexColor("#ea580c")},
+    "Radiologia Convencional": {"fundo": "#ffffff", "texto": "#2563eb", "hex": "2563EB"},
+    "Tomografia Computorizada": {"fundo": "#ffffff", "texto": "#16a34a", "hex": "16A34A"},
+    "Ecografia": {"fundo": "#ffffff", "texto": "#dc2626", "hex": "DC2626"},
+    "Ressonância Magnética": {"fundo": "#ffffff", "texto": "#ea580c", "hex": "EA580C"},
 }
 
 RESPONSABILIDADE_INDICADORES = {
@@ -71,6 +71,20 @@ def guardar_estado_no_github():
         df_nec_dict = st.session_state.df_necessidades.to_dict(orient="split") if isinstance(st.session_state.get("df_necessidades"), pd.DataFrame) else None
         pref_dict = st.session_state.preferencias_turnos.to_dict(orient="split") if isinstance(st.session_state.get("preferencias_turnos"), pd.DataFrame) else None
 
+        # Guardar também a última escala gerada no GitHub
+        escala_gerada_dict = None
+        if "escala_gerada" in st.session_state and st.session_state.escala_gerada is not None:
+            eg = st.session_state.escala_gerada
+            escala_gerada_dict = {
+                "df_resultado": eg["df_resultado"].to_dict(orient="split"),
+                "df_meta_resps": eg["df_meta_resps"].to_dict(orient="split"),
+                "mes": eg["mes"],
+                "ano": eg["ano"],
+                "totais_horas_realizadas": eg["totais_horas_realizadas"],
+                "banco_horas": eg["banco_horas"],
+                "trabalhadores": eg["trabalhadores"]
+            }
+
         dados = {
             "trabalhadores": st.session_state.trabalhadores,
             "trabalhadores_ativos": st.session_state.trabalhadores_ativos,
@@ -81,6 +95,7 @@ def guardar_estado_no_github():
             "turnos": turnos_dict,
             "df_necessidades": df_nec_dict,
             "preferencias_turnos": pref_dict,
+            "escala_gerada": escala_gerada_dict
         }
         
         conteudo = json.dumps(dados, ensure_ascii=False, indent=2)
@@ -124,6 +139,20 @@ def carregar_estado_do_github():
             raw_pref = dados["preferencias_turnos"]
             st.session_state.preferencias_turnos = pd.DataFrame(raw_pref["data"], index=raw_pref["index"], columns=raw_pref["columns"])
             
+        if dados.get("escala_gerada"):
+            eg = dados["escala_gerada"]
+            raw_res = eg["df_resultado"]
+            raw_meta = eg["df_meta_resps"]
+            st.session_state.escala_gerada = {
+                "df_resultado": pd.DataFrame(raw_res["data"], index=raw_res["index"], columns=raw_res["columns"]),
+                "df_meta_resps": pd.DataFrame(raw_meta["data"], index=raw_meta["index"], columns=raw_meta["columns"]),
+                "mes": eg["mes"],
+                "ano": eg["ano"],
+                "totais_horas_realizadas": eg["totais_horas_realizadas"],
+                "banco_horas": eg["banco_horas"],
+                "trabalhadores": eg["trabalhadores"]
+            }
+
         return True
     except Exception:
         return False
@@ -162,6 +191,12 @@ if "horas_contrato_semanal" not in st.session_state:
 
 if "turnos" not in st.session_state:
     st.session_state.turnos = pd.DataFrame(DEFAULT_TURNOS)
+
+if "escala_gerada" not in st.session_state:
+    st.session_state.escala_gerada = None
+
+if "confirmar_substituicao" not in st.session_state:
+    st.session_state.confirmar_substituicao = False
 
 
 def normalizar_turnos(df):
@@ -222,7 +257,6 @@ def e_fim_de_semana(dia, mes, ano):
 
 
 def contar_dias_uteis_mes(mes, ano):
-    """Calcula quantos dias úteis (Segunda a Sexta-feira) existem no mês."""
     num_dias = calendar.monthrange(ano, mes)[1]
     dias_uteis = 0
     for dia in range(1, num_dias + 1):
@@ -250,7 +284,6 @@ def dia_a_partir_do_rotulo(rotulo):
 
 
 def estilizar_fins_de_semana(df, mes, ano, dias_nas_colunas):
-    """Aplica estilo padronizado de bordas e fundo laranja para fins de semana."""
     preenchimento = "#fff7ed"
     borda_fim_de_semana = "#f59e0b"
     estilo_celula_fim_de_semana = f"background-color: {preenchimento}; border: 2px solid {borda_fim_de_semana};"
@@ -288,7 +321,6 @@ def estilizar_fins_de_semana(df, mes, ano, dias_nas_colunas):
 
 
 def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
-    """Tabela final HTML para visualização no navegador."""
     html_code = f"""
     <style>
         .escala-table-container {{
@@ -386,7 +418,6 @@ def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
 
 
 def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
-    """Gera um PDF exclusivo com o título e a tabela da escala em formato A4 Horizontal."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -404,59 +435,24 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
         fontName='Helvetica-Bold',
         fontSize=16,
         leading=20,
-        alignment=1, # Centro
+        alignment=1,
         textColor=colors.HexColor('#111827'),
         spaceAfter=15
     )
 
-    cell_header_style = ParagraphStyle(
-        'CellHeader',
-        fontName='Helvetica-Bold',
-        fontSize=7,
-        leading=9,
-        alignment=1,
-        textColor=colors.HexColor('#374151')
-    )
-
-    cell_header_fds_style = ParagraphStyle(
-        'CellHeaderFDS',
-        fontName='Helvetica-Bold',
-        fontSize=7,
-        leading=9,
-        alignment=1,
-        textColor=colors.HexColor('#9A3412')
-    )
-
-    cell_body_style = ParagraphStyle(
-        'CellBody',
-        fontName='Helvetica',
-        fontSize=6.5,
-        leading=8,
-        alignment=1,
-        textColor=colors.HexColor('#111827')
-    )
-
-    cell_trab_style = ParagraphStyle(
-        'CellTrab',
-        fontName='Helvetica-Bold',
-        fontSize=7,
-        leading=9,
-        alignment=0,
-        textColor=colors.HexColor('#111827')
-    )
+    cell_header_style = ParagraphStyle('CellHeader', fontName='Helvetica-Bold', fontSize=7, leading=9, alignment=1, textColor=colors.HexColor('#374151'))
+    cell_header_fds_style = ParagraphStyle('CellHeaderFDS', fontName='Helvetica-Bold', fontSize=7, leading=9, alignment=1, textColor=colors.HexColor('#9A3412'))
+    cell_body_style = ParagraphStyle('CellBody', fontName='Helvetica', fontSize=6.5, leading=8, alignment=1, textColor=colors.HexColor('#111827'))
+    cell_trab_style = ParagraphStyle('CellTrab', fontName='Helvetica-Bold', fontSize=7, leading=9, alignment=0, textColor=colors.HexColor('#111827'))
 
     elements = []
-    
-    # 1. Título Limpo do PDF
     nome_mes = calendar.month_name[mes].capitalize()
-    elements.append(Paragraph(f"Escala de Trabalho Mensal TAS - {nome_mes} de {ano}", title_style))
+    elements.append(Paragraph(f"Escala de Trabalho Mensal - {nome_mes} de {ano}", title_style))
     elements.append(Spacer(1, 5))
 
-    # 2. Construir Matriz de Dados
     headers = ["Trabalhador"] + list(df_resultado.columns)
     table_data = []
 
-    # Linha do Cabeçalho
     row_h = []
     for col_name in headers:
         dia = dia_a_partir_do_rotulo(col_name)
@@ -466,7 +462,6 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
             row_h.append(Paragraph(col_name, cell_header_style))
     table_data.append(row_h)
 
-    # Linhas dos Trabalhadores
     for trab in df_resultado.index:
         row = [Paragraph(html.escape(str(trab)), cell_trab_style)]
         for col_name in df_resultado.columns:
@@ -494,7 +489,6 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
                 row.append(Paragraph(f"<b>{html.escape(str(val))}</b>", cell_body_style))
         table_data.append(row)
 
-    # Estilização da Tabela no ReportLab
     t_style = [
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#F3F4F6')),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
@@ -506,7 +500,6 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
         ('RIGHTPADDING', (0, 0), (-1, -1), 2),
     ]
 
-    # Destaque de Fins de Semana
     for c_idx, col_name in enumerate(headers):
         dia = dia_a_partir_do_rotulo(col_name)
         if dia is not None and e_fim_de_semana(dia, mes, ano):
@@ -514,9 +507,7 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
             for r_idx in range(1, len(table_data)):
                 t_style.append(('BACKGROUND', (c_idx, r_idx), (c_idx, r_idx), colors.HexColor('#FFFDF2')))
 
-    # Larguras das colunas
     col_widths = [75] + [(842 - 30 - 75) / len(df_resultado.columns)] * len(df_resultado.columns)
-    
     table = Table(table_data, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle(t_style))
     elements.append(table)
@@ -527,7 +518,6 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
 
 
 def gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes, ano):
-    """Gera um ficheiro Excel (.xlsx) pré-formatado."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = f"Escala {calendar.month_name[mes]} {ano}"
@@ -544,12 +534,7 @@ def gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes, ano):
     font_l = Font(name="Segoe UI", size=10, bold=True, color="D97706")
     font_totals = Font(name="Segoe UI", size=10, bold=True, color="1F2937")
 
-    thin_border = Border(
-        left=Side(style="thin", color="E5E7EB"),
-        right=Side(style="thin", color="E5E7EB"),
-        top=Side(style="thin", color="E5E7EB"),
-        bottom=Side(style="thin", color="E5E7EB")
-    )
+    thin_border = Border(left=Side(style="thin", color="E5E7EB"), right=Side(style="thin", color="E5E7EB"), top=Side(style="thin", color="E5E7EB"), bottom=Side(style="thin", color="E5E7EB"))
     align_center = Alignment(horizontal="center", vertical="center")
     align_left = Alignment(horizontal="left", vertical="center")
 
@@ -625,7 +610,7 @@ def resumo_competencias_html(nome, numero=None):
     for responsabilidade, turnos in competencias.items():
         if not turnos:
             continue
-        cores = RESPONSABILIDADE_CORES.get(responsabilidade, {"fundo": "#ffffff", "texto": "#374151", "borda": "#d1d5db"})
+        cores = RESPONSABILIDADE_CORES.get(responsabilidade, {"fundo": "#ffffff", "texto": "#374151"})
         responsabilidade_segura = html.escape(responsabilidade)
         turnos_seguro = html.escape(", ".join(turnos))
         etiquetas.append(
@@ -663,9 +648,332 @@ if "novo_trabalhador_form_version" not in st.session_state:
     st.session_state.novo_trabalhador_form_version = 0
 
 
+def executar_gerador_escala(mes_sel, ano_sel):
+    """Função principal para calcular e gerar a escala optimizada."""
+    trabalhadores = [nome for nome in st.session_state.trabalhadores if st.session_state.trabalhadores_ativos.get(nome, True)]
+    turnos = normalizar_turnos(st.session_state.turnos)
+    df_nec = st.session_state.get("df_necessidades")
+    num_dias = calendar.monthrange(ano_sel, mes_sel)[1]
+
+    if not st.session_state.trabalhadores or not trabalhadores:
+        st.error("Adicione e ative trabalhadores antes de gerar a escala.")
+        return False
+    elif turnos.empty or df_nec is None:
+        st.error("Configure as responsabilidades, os turnos e as necessidades mensais.")
+        return False
+
+    slots = turnos_ordenados(turnos)
+    duracoes_slots = [calcular_duracao_turno_horas(s.Início, s.Fim) for s in slots]
+    dias_uteis_mes = contar_dias_uteis_mes(mes_sel, ano_sel)
+
+    model = cp_model.CpModel()
+    escala = {}
+    trabalha_dia = {}
+
+    for trabalhador in trabalhadores:
+        for dia in range(1, num_dias + 1):
+            trabalha_dia[(trabalhador, dia)] = model.NewBoolVar(f"trabalha_{trabalhador}_{dia}")
+            for slot_index, _slot in enumerate(slots):
+                escala[(trabalhador, dia, slot_index)] = model.NewBoolVar(f"e_{trabalhador}_{dia}_{slot_index}")
+
+    for trabalhador in trabalhadores:
+        for dia in range(1, num_dias + 1):
+            turnos_do_dia = [escala[(trabalhador, dia, s_idx)] for s_idx in range(len(slots))]
+            model.Add(sum(turnos_do_dia) >= 1).OnlyEnforceIf(trabalha_dia[(trabalhador, dia)])
+            model.Add(sum(turnos_do_dia) == 0).OnlyEnforceIf(trabalha_dia[(trabalhador, dia)].Not())
+
+    for trabalhador in trabalhadores:
+        for dia in range(1, num_dias + 1):
+            for slot_index, slot in enumerate(slots):
+                if not trabalhador_pode_fazer(trabalhador, slot.Responsabilidade, slot.Turno):
+                    model.Add(escala[(trabalhador, dia, slot_index)] == 0)
+
+    for trabalhador in trabalhadores:
+        for d in range(1, num_dias - 4):
+            model.Add(sum(trabalha_dia[(trabalhador, d + k)] for k in range(6)) <= 5)
+
+    fins_de_semana = []
+    for d in range(1, num_dias):
+        if datetime(ano_sel, mes_sel, d).weekday() == 5:
+            if d + 1 <= num_dias:
+                fins_de_semana.append((d, d + 1))
+
+    fds_livre_var = {}
+    for trabalhador in trabalhadores:
+        for idx_fds, (sab, dom) in enumerate(fins_de_semana):
+            v_livre = model.NewBoolVar(f"fds_livre_{trabalhador}_{idx_fds}")
+            fds_livre_var[(trabalhador, idx_fds)] = v_livre
+            model.Add(trabalha_dia[(trabalhador, sab)] == 0).OnlyEnforceIf(v_livre)
+            model.Add(trabalha_dia[(trabalhador, dom)] == 0).OnlyEnforceIf(v_livre)
+            model.Add(trabalha_dia[(trabalhador, sab)] + trabalha_dia[(trabalhador, dom)] >= 1).OnlyEnforceIf(v_livre.Not())
+
+        if fins_de_semana:
+            model.Add(sum(fds_livre_var[(trabalhador, idx_fds)] for idx_fds in range(len(fins_de_semana))) >= 1)
+
+    pares_jornada = []
+    pares_jornada_por_trabalhador = {trabalhador: [] for trabalhador in trabalhadores}
+    pares_jornada_preferidos = []
+    pares_responsabilidades_diferentes = []
+    for trabalhador in trabalhadores:
+        for dia in range(1, num_dias + 1):
+            variaveis_m12 = [escala[(trabalhador, dia, slot_index)] for slot_index, slot in enumerate(slots) if slot.Turno == "M12"]
+            variaveis_t24 = [escala[(trabalhador, dia, slot_index)] for slot_index, slot in enumerate(slots) if slot.Turno == "T24"]
+            variaveis_outros = [escala[(trabalhador, dia, slot_index)] for slot_index, slot in enumerate(slots) if not e_turno_de_jornada_alargada(slot.Turno)]
+
+            model.Add(sum(variaveis_m12) <= 1)
+            model.Add(sum(variaveis_t24) <= 1)
+            model.Add(sum(variaveis_outros) <= 1)
+            model.Add(sum(variaveis_m12) + sum(variaveis_outros) <= 1)
+            model.Add(sum(variaveis_t24) + sum(variaveis_outros) <= 1)
+
+            for m12_index, m12_slot in enumerate(slots):
+                if m12_slot.Turno != "M12": continue
+                for t24_index, t24_slot in enumerate(slots):
+                    if t24_slot.Turno != "T24": continue
+                    par = model.NewBoolVar(f"par_{trabalhador}_{dia}_{m12_index}_{t24_index}")
+                    m12_atribuido = escala[(trabalhador, dia, m12_index)]
+                    t24_atribuido = escala[(trabalhador, dia, t24_index)]
+                    model.Add(par <= m12_atribuido)
+                    model.Add(par <= t24_atribuido)
+                    model.Add(par >= m12_atribuido + t24_atribuido - 1)
+                    pares_jornada.append(par)
+                    pares_jornada_por_trabalhador[trabalhador].append(par)
+                    if st.session_state.preferencias_jornadas_12h.get(trabalhador, False):
+                        pares_jornada_preferidos.append(par)
+                    if m12_slot.Responsabilidade != t24_slot.Responsabilidade:
+                        pares_responsabilidades_diferentes.append(par)
+
+    for trabalhador in trabalhadores:
+        limite_12h = max(0, int(st.session_state.limites_jornadas_12h.get(trabalhador, LIMITE_JORNADAS_12H_PADRAO)))
+        model.Add(sum(pares_jornada_por_trabalhador[trabalhador]) <= limite_12h)
+
+    for dia in range(1, num_dias + 1):
+        for slot_index, slot in enumerate(slots):
+            coluna = chave_coluna_turno(slot)
+            necessidade = int(df_nec.loc[str(dia), coluna])
+            model.Add(sum(escala[(trabalhador, dia, slot_index)] for trabalhador in trabalhadores) == necessidade)
+
+    preferencias_turnos = st.session_state.get("preferencias_turnos")
+    dias_ferias_por_trabalhador = {t: 0 for t in trabalhadores}
+
+    for trabalhador in trabalhadores:
+        for dia in range(1, num_dias + 1):
+            preferencia = ""
+            coluna_dia = str(dia)
+            if isinstance(preferencias_turnos, pd.DataFrame) and trabalhador in preferencias_turnos.index and coluna_dia in preferencias_turnos.columns:
+                preferencia = str(preferencias_turnos.loc[trabalhador, coluna_dia]).strip()
+
+            if preferencia in {"F", "L"}:
+                for slot_index in range(len(slots)):
+                    model.Add(escala[(trabalhador, dia, slot_index)] == 0)
+                if preferencia == "L":
+                    dias_ferias_por_trabalhador[trabalhador] += 1
+            elif preferencia:
+                for slot_index, slot in enumerate(slots):
+                    if slot.Turno != preferencia:
+                        model.Add(escala[(trabalhador, dia, slot_index)] == 0)
+
+    for trabalhador in trabalhadores:
+        for dia in range(1, num_dias):
+            for slot_index, slot in enumerate(slots):
+                if not turno_atravessa_meia_noite(slot.Início, slot.Fim): continue
+                for proximo_index, proximo_slot in enumerate(slots):
+                    try:
+                        hora_inicio = datetime.strptime(proximo_slot.Início, "%H:%M").hour
+                    except ValueError:
+                        continue
+                    if hora_inicio < 12:
+                        model.Add(escala[(trabalhador, dia, slot_index)] + escala[(trabalhador, dia + 1, proximo_index)] <= 1)
+
+    penalizacoes_t_meio = []
+    for trabalhador in trabalhadores:
+        for dia in range(1, num_dias):
+            turnos_t_dia = [escala[(trabalhador, dia, s_idx)] for s_idx, s in enumerate(slots) if s.Turno == "T"]
+            if turnos_t_dia:
+                t_em_trabalho_seguido = model.NewBoolVar(f"t_in_middle_{trabalhador}_{dia}")
+                model.Add(sum(turnos_t_dia) + trabalha_dia[(trabalhador, dia + 1)] == 2).OnlyEnforceIf(t_em_trabalho_seguido)
+                model.Add(sum(turnos_t_dia) + trabalha_dia[(trabalhador, dia + 1)] < 2).OnlyEnforceIf(t_em_trabalho_seguido.Not())
+                penalizacoes_t_meio.append(t_em_trabalho_seguido)
+
+    penalizacoes_folga_isolada = []
+    for trabalhador in trabalhadores:
+        for dia in range(2, num_dias):
+            folga_1_dia = model.NewBoolVar(f"folga_isolada_{trabalhador}_{dia}")
+            model.Add(trabalha_dia[(trabalhador, dia - 1)] + trabalha_dia[(trabalhador, dia)].Not() + trabalha_dia[(trabalhador, dia + 1)] == 3).OnlyEnforceIf(folga_1_dia)
+            model.Add(trabalha_dia[(trabalhador, dia - 1)] + trabalha_dia[(trabalhador, dia)].Not() + trabalha_dia[(trabalhador, dia + 1)] < 3).OnlyEnforceIf(folga_1_dia.Not())
+            penalizacoes_folga_isolada.append(folga_1_dia)
+
+    desvios_equidade = []
+    todas_resps = list({s.Responsabilidade for s in slots})
+    for resp in todas_resps:
+        contagens_resp = []
+        for trabalhador in trabalhadores:
+            slots_resp = [escala[(trabalhador, d, s_idx)] for d in range(1, num_dias + 1) for s_idx, s in enumerate(slots) if s.Responsabilidade == resp]
+            var_c = model.NewIntVar(0, num_dias, f"count_resp_{resp}_{trabalhador}")
+            model.Add(var_c == sum(slots_resp))
+            contagens_resp.append(var_c)
+        
+        max_resp = model.NewIntVar(0, num_dias, f"max_resp_{resp}")
+        min_resp = model.NewIntVar(0, num_dias, f"min_resp_{resp}")
+        model.AddMaxEquality(max_resp, contagens_resp)
+        model.AddMinEquality(min_resp, contagens_resp)
+        diff_resp = model.NewIntVar(0, num_dias, f"diff_resp_{resp}")
+        model.Add(diff_resp == max_resp - min_resp)
+        desvios_equidade.append(diff_resp)
+
+    todos_codigos = list({s.Turno for s in slots})
+    for cod_t in todos_codigos:
+        contagens_cod = []
+        for trabalhador in trabalhadores:
+            slots_cod = [escala[(trabalhador, d, s_idx)] for d in range(1, num_dias + 1) for s_idx, s in enumerate(slots) if s.Turno == cod_t]
+            var_c = model.NewIntVar(0, num_dias, f"count_cod_{cod_t}_{trabalhador}")
+            model.Add(var_c == sum(slots_cod))
+            contagens_cod.append(var_c)
+        
+        max_cod = model.NewIntVar(0, num_dias, f"max_cod_{cod_t}")
+        min_cod = model.NewIntVar(0, num_dias, f"min_cod_{cod_t}")
+        model.AddMaxEquality(max_cod, contagens_cod)
+        model.AddMinEquality(min_cod, contagens_cod)
+        diff_cod = model.NewIntVar(0, num_dias, f"diff_cod_{cod_t}")
+        model.Add(diff_cod == max_cod - min_cod)
+        desvios_equidade.append(diff_cod)
+
+    duracoes_int = [int(round(d * 10)) for d in duracoes_slots]
+    desvios_absolutos = []
+    for trabalhador in trabalhadores:
+        hrs_semanais = float(st.session_state.horas_contrato_semanal.get(trabalhador, HORAS_CONTRATO_SEMANAL_PADRAO))
+        hrs_diarias_alvo = hrs_semanais / 5.0
+        hrs_alvo_mes = hrs_diarias_alvo * dias_uteis_mes
+        hrs_alvo_int = int(round(hrs_alvo_mes * 10))
+
+        horas_ferias_int = int(round(dias_ferias_por_trabalhador[trabalhador] * HORAS_DIA_FERIAS_LICENCA * 10))
+
+        expressao_horas = [horas_ferias_int]
+        for dia in range(1, num_dias + 1):
+            for slot_index in range(len(slots)):
+                expressao_horas.append(escala[(trabalhador, dia, slot_index)] * duracoes_int[slot_index])
+
+        total_hrs_var = model.NewIntVar(0, 4000, f"total_hrs_{trabalhador}")
+        model.Add(total_hrs_var == sum(expressao_horas))
+
+        desvio_var = model.NewIntVar(-4000, 4000, f"desvio_{trabalhador}")
+        model.Add(desvio_var == total_hrs_var - hrs_alvo_int)
+
+        desvio_abs = model.NewIntVar(0, 4000, f"desvio_abs_{trabalhador}")
+        model.AddAbsEquality(desvio_abs, desvio_var)
+        desvios_absolutos.append(desvio_abs)
+
+    objetivo = []
+    if pares_jornada_preferidos:
+        objetivo.append(1_000_000 * sum(pares_jornada_preferidos))
+    if fins_de_semana:
+        todos_fds_livres = [fds_livre_var[k] for k in fds_livre_var]
+        objetivo.append(50_000 * sum(todos_fds_livres))
+    if pares_responsabilidades_diferentes:
+        objetivo.append(1_000 * sum(pares_responsabilidades_diferentes))
+
+    if penalizacoes_t_meio:
+        objetivo.append(-5_000 * sum(penalizacoes_t_meio))
+    if penalizacoes_folga_isolada:
+        objetivo.append(-3_000 * sum(penalizacoes_folga_isolada))
+    if desvios_equidade:
+        objetivo.append(-2_000 * sum(desvios_equidade))
+
+    objetivo.append(-10 * sum(desvios_absolutos))
+    model.Maximize(sum(objetivo))
+
+    solver = cp_model.CpSolver()
+    solver.parameters.max_time_in_seconds = 30.0
+    status = solver.Solve(model)
+
+    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        dados_escala = {}
+        dados_meta_resps = {}
+        totais_horas_realizadas = {}
+        banco_horas = {}
+
+        for trabalhador in trabalhadores:
+            linha_trabalhador = []
+            linha_meta_trabalhador = []
+            horas_realizadas_trab = dias_ferias_por_trabalhador[trabalhador] * HORAS_DIA_FERIAS_LICENCA
+
+            for dia in range(1, num_dias + 1):
+                pref_dia = ""
+                col_d = str(dia)
+                if isinstance(preferencias_turnos, pd.DataFrame) and trabalhador in preferencias_turnos.index and col_d in preferencias_turnos.columns:
+                    pref_dia = str(preferencias_turnos.loc[trabalhador, col_d]).strip()
+
+                if pref_dia == "L":
+                    linha_trabalhador.append("L")
+                    linha_meta_trabalhador.append("L")
+                    continue
+
+                codigos_do_dia = []
+                resps_do_dia = []
+                for slot_index, slot in enumerate(slots):
+                    if solver.Value(escala[(trabalhador, dia, slot_index)]):
+                        codigos_do_dia.append(slot.Turno)
+                        resps_do_dia.append(slot.Responsabilidade)
+                        horas_realizadas_trab += duracoes_slots[slot_index]
+
+                if len(codigos_do_dia) > 1:
+                    atribuicao = " / ".join(codigos_do_dia)
+                    meta_val = (codigos_do_dia, resps_do_dia)
+                elif len(codigos_do_dia) == 1:
+                    atribuicao = codigos_do_dia[0]
+                    meta_val = resps_do_dia[0]
+                else:
+                    atribuicao = "F"
+                    meta_val = ""
+
+                linha_trabalhador.append(atribuicao)
+                linha_meta_trabalhador.append(meta_val)
+
+            hrs_contrato_sem = float(st.session_state.horas_contrato_semanal.get(trabalhador, HORAS_CONTRATO_SEMANAL_PADRAO))
+            hrs_contrato_mes = round((hrs_contrato_sem / 5.0) * dias_uteis_mes, 1)
+            saldo_banco = round(horas_realizadas_trab - hrs_contrato_mes, 1)
+
+            totais_horas_realizadas[trabalhador] = horas_realizadas_trab
+            banco_horas[trabalhador] = saldo_banco
+
+            s_banco = f"+{saldo_banco}h" if saldo_banco > 0 else f"{saldo_banco}h"
+            
+            linha_trabalhador.extend([
+                f"{round(horas_realizadas_trab, 1)}h",
+                f"{hrs_contrato_mes}h",
+                s_banco
+            ])
+            linha_meta_trabalhador.extend(["", "", ""])
+            
+            dados_escala[trabalhador] = linha_trabalhador
+            dados_meta_resps[trabalhador] = linha_meta_trabalhador
+
+        colunas_dias = [str(dia) for dia in range(1, num_dias + 1)]
+        todas_colunas = colunas_dias + ["Horas Realizadas", "Alvo Contratual", "Banco de Horas"]
+
+        df_resultado = pd.DataFrame.from_dict(dados_escala, orient="index", columns=todas_colunas)
+        df_meta_resps = pd.DataFrame.from_dict(dados_meta_resps, orient="index", columns=todas_colunas)
+
+        # GUARDAR NA SESSÃO
+        st.session_state.escala_gerada = {
+            "df_resultado": df_resultado,
+            "df_meta_resps": df_meta_resps,
+            "mes": mes_sel,
+            "ano": ano_sel,
+            "totais_horas_realizadas": totais_horas_realizadas,
+            "banco_horas": banco_horas,
+            "trabalhadores": trabalhadores
+        }
+        guardar_estado_no_github()
+        return True
+    else:
+        st.error("Não foi possível encontrar uma solução válida com as restrições impostas.")
+        return False
+
+
 st.title("🗓️ Gestor Inteligente de Escalas de Trabalho")
 
-tabs = st.tabs(["1. Gestão da Equipa", "2. Responsabilidades e Turnos", "3. Necessidades Mensais", "4. Indisponibilidades", "5. Gerar Escala"])
+tabs = st.tabs(["1. Gestão da Equipa", "2. Responsabilidades e Turnos", "3. Necessidades Mensais", "4. Indisponividades", "5. Gerar Escala"])
 
 # -----------------------------------------------------------------------------
 # TAB 1: GESTÃO DA EQUIPA
@@ -770,8 +1078,8 @@ with tabs[1]:
 with tabs[2]:
     st.header("Configuração de Necessidades do Mês")
     col_mes, col_ano = st.columns(2)
-    mes_sel = col_mes.selectbox("Mês", list(range(1, 13)), index=datetime.now().month - 1)
-    ano_sel = col_ano.number_input("Ano", min_value=2024, max_value=2030, value=datetime.now().year)
+    mes_sel = col_mes.selectbox("Mês", list(range(1, 13)), index=datetime.now().month - 1, key="tab3_mes")
+    ano_sel = col_ano.number_input("Ano", min_value=2024, max_value=2030, value=datetime.now().year, key="tab3_ano")
     num_dias = calendar.monthrange(ano_sel, mes_sel)[1]
     dias_uteis_mes = contar_dias_uteis_mes(mes_sel, ano_sel)
     
@@ -852,375 +1160,100 @@ with tabs[3]:
 with tabs[4]:
     st.header("Gerador de Escala Automática")
     st.caption("Regras Ativas: Múltiplos turnos M12+T24; descanso noturno; máx. 5 dias seguidos; 1-2 fds livres; distribuição equitativa de turnos/responsabilidades; Turno T ao fim da sequência; folgas agrupadas (2 a 3) e distribuídas pelo mês.")
-    
-    if st.button("⚡ Gerar Escala Optimizada", type="primary"):
-        trabalhadores = [nome for nome in st.session_state.trabalhadores if st.session_state.trabalhadores_ativos.get(nome, True)]
-        turnos = normalizar_turnos(st.session_state.turnos)
-        df_nec = st.session_state.get("df_necessidades")
 
-        if not st.session_state.trabalhadores or not trabalhadores:
-            st.error("Adicione e ative trabalhadores antes de gerar a escala.")
-        elif turnos.empty or df_nec is None:
-            st.error("Configure as responsabilidades, os turnos e as necessidades mensais.")
-        else:
-            slots = turnos_ordenados(turnos)
-            duracoes_slots = [calcular_duracao_turno_horas(s.Início, s.Fim) for s in slots]
-            dias_uteis_mes = contar_dias_uteis_mes(mes_sel, ano_sel)
+    # Alinhamento do Mês e Ano
+    if "mes_sel" in locals():
+        mes_gerar = mes_sel
+        ano_gerar = ano_sel
+    else:
+        mes_gerar = datetime.now().month
+        ano_gerar = datetime.now().year
 
-            model = cp_model.CpModel()
-            escala = {}
-            trabalha_dia = {}
-
-            # 1. Variáveis de decisão base
-            for trabalhador in trabalhadores:
-                for dia in range(1, num_dias + 1):
-                    trabalha_dia[(trabalhador, dia)] = model.NewBoolVar(f"trabalha_{trabalhador}_{dia}")
-                    for slot_index, _slot in enumerate(slots):
-                        escala[(trabalhador, dia, slot_index)] = model.NewBoolVar(f"e_{trabalhador}_{dia}_{slot_index}")
-
-            # Vincular trabalha_dia
-            for trabalhador in trabalhadores:
-                for dia in range(1, num_dias + 1):
-                    turnos_do_dia = [escala[(trabalhador, dia, s_idx)] for s_idx in range(len(slots))]
-                    model.Add(sum(turnos_do_dia) >= 1).OnlyEnforceIf(trabalha_dia[(trabalhador, dia)])
-                    model.Add(sum(turnos_do_dia) == 0).OnlyEnforceIf(trabalha_dia[(trabalhador, dia)].Not())
-
-            # 2. Restrição de Competências
-            for trabalhador in trabalhadores:
-                for dia in range(1, num_dias + 1):
-                    for slot_index, slot in enumerate(slots):
-                        if not trabalhador_pode_fazer(trabalhador, slot.Responsabilidade, slot.Turno):
-                            model.Add(escala[(trabalhador, dia, slot_index)] == 0)
-
-            # 3. Máximo de 5 Dias Consecutivos
-            for trabalhador in trabalhadores:
-                for d in range(1, num_dias - 4):
-                    model.Add(sum(trabalha_dia[(trabalhador, d + k)] for k in range(6)) <= 5)
-
-            # 4. Fins de Semana Livres (Mínimo 1, idealmente 2)
-            fins_de_semana = []
-            for d in range(1, num_dias):
-                if datetime(ano_sel, mes_sel, d).weekday() == 5:
-                    if d + 1 <= num_dias:
-                        fins_de_semana.append((d, d + 1))
-
-            fds_livre_var = {}
-            for trabalhador in trabalhadores:
-                for idx_fds, (sab, dom) in enumerate(fins_de_semana):
-                    v_livre = model.NewBoolVar(f"fds_livre_{trabalhador}_{idx_fds}")
-                    fds_livre_var[(trabalhador, idx_fds)] = v_livre
-                    model.Add(trabalha_dia[(trabalhador, sab)] == 0).OnlyEnforceIf(v_livre)
-                    model.Add(trabalha_dia[(trabalhador, dom)] == 0).OnlyEnforceIf(v_livre)
-                    model.Add(trabalha_dia[(trabalhador, sab)] + trabalha_dia[(trabalhador, dom)] >= 1).OnlyEnforceIf(v_livre.Not())
-
-                if fins_de_semana:
-                    model.Add(sum(fds_livre_var[(trabalhador, idx_fds)] for idx_fds in range(len(fins_de_semana))) >= 1)
-
-            # 5. Jornadas de 12 Horas (M12 + T24)
-            pares_jornada = []
-            pares_jornada_por_trabalhador = {trabalhador: [] for trabalhador in trabalhadores}
-            pares_jornada_preferidos = []
-            pares_responsabilidades_diferentes = []
-            for trabalhador in trabalhadores:
-                for dia in range(1, num_dias + 1):
-                    variaveis_m12 = [escala[(trabalhador, dia, slot_index)] for slot_index, slot in enumerate(slots) if slot.Turno == "M12"]
-                    variaveis_t24 = [escala[(trabalhador, dia, slot_index)] for slot_index, slot in enumerate(slots) if slot.Turno == "T24"]
-                    variaveis_outros = [escala[(trabalhador, dia, slot_index)] for slot_index, slot in enumerate(slots) if not e_turno_de_jornada_alargada(slot.Turno)]
-
-                    model.Add(sum(variaveis_m12) <= 1)
-                    model.Add(sum(variaveis_t24) <= 1)
-                    model.Add(sum(variaveis_outros) <= 1)
-                    model.Add(sum(variaveis_m12) + sum(variaveis_outros) <= 1)
-                    model.Add(sum(variaveis_t24) + sum(variaveis_outros) <= 1)
-
-                    for m12_index, m12_slot in enumerate(slots):
-                        if m12_slot.Turno != "M12": continue
-                        for t24_index, t24_slot in enumerate(slots):
-                            if t24_slot.Turno != "T24": continue
-                            par = model.NewBoolVar(f"par_{trabalhador}_{dia}_{m12_index}_{t24_index}")
-                            m12_atribuido = escala[(trabalhador, dia, m12_index)]
-                            t24_atribuido = escala[(trabalhador, dia, t24_index)]
-                            model.Add(par <= m12_atribuido)
-                            model.Add(par <= t24_atribuido)
-                            model.Add(par >= m12_atribuido + t24_atribuido - 1)
-                            pares_jornada.append(par)
-                            pares_jornada_por_trabalhador[trabalhador].append(par)
-                            if st.session_state.preferencias_jornadas_12h.get(trabalhador, False):
-                                pares_jornada_preferidos.append(par)
-                            if m12_slot.Responsabilidade != t24_slot.Responsabilidade:
-                                pares_responsabilidades_diferentes.append(par)
-
-            for trabalhador in trabalhadores:
-                limite_12h = max(0, int(st.session_state.limites_jornadas_12h.get(trabalhador, LIMITE_JORNADAS_12H_PADRAO)))
-                model.Add(sum(pares_jornada_por_trabalhador[trabalhador]) <= limite_12h)
-
-            # 6. Necessidades Diárias
-            for dia in range(1, num_dias + 1):
-                for slot_index, slot in enumerate(slots):
-                    coluna = chave_coluna_turno(slot)
-                    necessidade = int(df_nec.loc[str(dia), coluna])
-                    model.Add(sum(escala[(trabalhador, dia, slot_index)] for trabalhador in trabalhadores) == necessidade)
-
-            # 7. Preferências, Folgas 'F' e Férias/Licença 'L'
-            preferencias_turnos = st.session_state.get("preferencias_turnos")
-            dias_ferias_por_trabalhador = {t: 0 for t in trabalhadores}
-
-            for trabalhador in trabalhadores:
-                for dia in range(1, num_dias + 1):
-                    preferencia = ""
-                    coluna_dia = str(dia)
-                    if isinstance(preferencias_turnos, pd.DataFrame) and trabalhador in preferencias_turnos.index and coluna_dia in preferencias_turnos.columns:
-                        preferencia = str(preferencias_turnos.loc[trabalhador, coluna_dia]).strip()
-
-                    if preferencia in {"F", "L"}:
-                        for slot_index in range(len(slots)):
-                            model.Add(escala[(trabalhador, dia, slot_index)] == 0)
-                        if preferencia == "L":
-                            dias_ferias_por_trabalhador[trabalhador] += 1
-                    elif preferencia:
-                        for slot_index, slot in enumerate(slots):
-                            if slot.Turno != preferencia:
-                                model.Add(escala[(trabalhador, dia, slot_index)] == 0)
-
-            # 8. Descanso Noturno Mínimo
-            for trabalhador in trabalhadores:
-                for dia in range(1, num_dias):
-                    for slot_index, slot in enumerate(slots):
-                        if not turno_atravessa_meia_noite(slot.Início, slot.Fim): continue
-                        for proximo_index, proximo_slot in enumerate(slots):
-                            try:
-                                hora_inicio = datetime.strptime(proximo_slot.Início, "%H:%M").hour
-                            except ValueError:
-                                continue
-                            if hora_inicio < 12:
-                                model.Add(escala[(trabalhador, dia, slot_index)] + escala[(trabalhador, dia + 1, proximo_index)] <= 1)
-
-            # 9. Regras de Otimização e Sequenciamento
-            penalizacoes_t_meio = []
-            for trabalhador in trabalhadores:
-                for dia in range(1, num_dias):
-                    turnos_t_dia = [escala[(trabalhador, dia, s_idx)] for s_idx, s in enumerate(slots) if s.Turno == "T"]
-                    if turnos_t_dia:
-                        t_em_trabalho_seguido = model.NewBoolVar(f"t_in_middle_{trabalhador}_{dia}")
-                        model.Add(sum(turnos_t_dia) + trabalha_dia[(trabalhador, dia + 1)] == 2).OnlyEnforceIf(t_em_trabalho_seguido)
-                        model.Add(sum(turnos_t_dia) + trabalha_dia[(trabalhador, dia + 1)] < 2).OnlyEnforceIf(t_em_trabalho_seguido.Not())
-                        penalizacoes_t_meio.append(t_em_trabalho_seguido)
-
-            penalizacoes_folga_isolada = []
-            for trabalhador in trabalhadores:
-                for dia in range(2, num_dias):
-                    folga_1_dia = model.NewBoolVar(f"folga_isolada_{trabalhador}_{dia}")
-                    model.Add(trabalha_dia[(trabalhador, dia - 1)] + trabalha_dia[(trabalhador, dia)].Not() + trabalha_dia[(trabalhador, dia + 1)] == 3).OnlyEnforceIf(folga_1_dia)
-                    model.Add(trabalha_dia[(trabalhador, dia - 1)] + trabalha_dia[(trabalhador, dia)].Not() + trabalha_dia[(trabalhador, dia + 1)] < 3).OnlyEnforceIf(folga_1_dia.Not())
-                    penalizacoes_folga_isolada.append(folga_1_dia)
-
-            desvios_equidade = []
-            todas_resps = list({s.Responsabilidade for s in slots})
-            for resp in todas_resps:
-                contagens_resp = []
-                for trabalhador in trabalhadores:
-                    slots_resp = [escala[(trabalhador, d, s_idx)] for d in range(1, num_dias + 1) for s_idx, s in enumerate(slots) if s.Responsabilidade == resp]
-                    var_c = model.NewIntVar(0, num_dias, f"count_resp_{resp}_{trabalhador}")
-                    model.Add(var_c == sum(slots_resp))
-                    contagens_resp.append(var_c)
-                
-                max_resp = model.NewIntVar(0, num_dias, f"max_resp_{resp}")
-                min_resp = model.NewIntVar(0, num_dias, f"min_resp_{resp}")
-                model.AddMaxEquality(max_resp, contagens_resp)
-                model.AddMinEquality(min_resp, contagens_resp)
-                diff_resp = model.NewIntVar(0, num_dias, f"diff_resp_{resp}")
-                model.Add(diff_resp == max_resp - min_resp)
-                desvios_equidade.append(diff_resp)
-
-            todos_codigos = list({s.Turno for s in slots})
-            for cod_t in todos_codigos:
-                contagens_cod = []
-                for trabalhador in trabalhadores:
-                    slots_cod = [escala[(trabalhador, d, s_idx)] for d in range(1, num_dias + 1) for s_idx, s in enumerate(slots) if s.Turno == cod_t]
-                    var_c = model.NewIntVar(0, num_dias, f"count_cod_{cod_t}_{trabalhador}")
-                    model.Add(var_c == sum(slots_cod))
-                    contagens_cod.append(var_c)
-                
-                max_cod = model.NewIntVar(0, num_dias, f"max_cod_{cod_t}")
-                min_cod = model.NewIntVar(0, num_dias, f"min_cod_{cod_t}")
-                model.AddMaxEquality(max_cod, contagens_cod)
-                model.AddMinEquality(min_cod, contagens_cod)
-                diff_cod = model.NewIntVar(0, num_dias, f"diff_cod_{cod_t}")
-                model.Add(diff_cod == max_cod - min_cod)
-                desvios_equidade.append(diff_cod)
-
-            # 10. Cálculo do Balanço de Horas por Dia Útil
-            duracoes_int = [int(round(d * 10)) for d in duracoes_slots]
-
-            desvios_absolutos = []
-            for trabalhador in trabalhadores:
-                hrs_semanais = float(st.session_state.horas_contrato_semanal.get(trabalhador, HORAS_CONTRATO_SEMANAL_PADRAO))
-                hrs_diarias_alvo = hrs_semanais / 5.0
-                hrs_alvo_mes = hrs_diarias_alvo * dias_uteis_mes
-                hrs_alvo_int = int(round(hrs_alvo_mes * 10))
-
-                horas_ferias_int = int(round(dias_ferias_por_trabalhador[trabalhador] * HORAS_DIA_FERIAS_LICENCA * 10))
-
-                expressao_horas = [horas_ferias_int]
-                for dia in range(1, num_dias + 1):
-                    for slot_index in range(len(slots)):
-                        expressao_horas.append(escala[(trabalhador, dia, slot_index)] * duracoes_int[slot_index])
-
-                total_hrs_var = model.NewIntVar(0, 4000, f"total_hrs_{trabalhador}")
-                model.Add(total_hrs_var == sum(expressao_horas))
-
-                desvio_var = model.NewIntVar(-4000, 4000, f"desvio_{trabalhador}")
-                model.Add(desvio_var == total_hrs_var - hrs_alvo_int)
-
-                desvio_abs = model.NewIntVar(0, 4000, f"desvio_abs_{trabalhador}")
-                model.AddAbsEquality(desvio_abs, desvio_var)
-                desvios_absolutos.append(desvio_abs)
-
-            # 11. Função Objetivo Integrada
-            objetivo = []
-            if pares_jornada_preferidos:
-                objetivo.append(1_000_000 * sum(pares_jornada_preferidos))
-            if fins_de_semana:
-                todos_fds_livres = [fds_livre_var[k] for k in fds_livre_var]
-                objetivo.append(50_000 * sum(todos_fds_livres))
-            if pares_responsabilidades_diferentes:
-                objetivo.append(1_000 * sum(pares_responsabilidades_diferentes))
-
-            if penalizacoes_t_meio:
-                objetivo.append(-5_000 * sum(penalizacoes_t_meio))
-            if penalizacoes_folga_isolada:
-                objetivo.append(-3_000 * sum(penalizacoes_folga_isolada))
-            if desvios_equidade:
-                objetivo.append(-2_000 * sum(desvios_equidade))
-
-            objetivo.append(-10 * sum(desvios_absolutos))
-            model.Maximize(sum(objetivo))
-
-            # Executar Solver
-            solver = cp_model.CpSolver()
-            solver.parameters.max_time_in_seconds = 30.0
-            status = solver.Solve(model)
-
-            if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-                st.success("Escala gerada com sucesso!")
-                dados_escala = {}
-                dados_meta_resps = {}
-                totais_horas_realizadas = {}
-                banco_horas = {}
-
-                for trabalhador in trabalhadores:
-                    linha_trabalhador = []
-                    linha_meta_trabalhador = []
-                    horas_realizadas_trab = dias_ferias_por_trabalhador[trabalhador] * HORAS_DIA_FERIAS_LICENCA
-
-                    for dia in range(1, num_dias + 1):
-                        pref_dia = ""
-                        col_d = str(dia)
-                        if isinstance(preferencias_turnos, pd.DataFrame) and trabalhador in preferencias_turnos.index and col_d in preferencias_turnos.columns:
-                            pref_dia = str(preferencias_turnos.loc[trabalhador, col_d]).strip()
-
-                        if pref_dia == "L":
-                            linha_trabalhador.append("L")
-                            linha_meta_trabalhador.append("L")
-                            continue
-
-                        codigos_do_dia = []
-                        resps_do_dia = []
-                        for slot_index, slot in enumerate(slots):
-                            if solver.Value(escala[(trabalhador, dia, slot_index)]):
-                                codigos_do_dia.append(slot.Turno)
-                                resps_do_dia.append(slot.Responsabilidade)
-                                horas_realizadas_trab += duracoes_slots[slot_index]
-
-                        if len(codigos_do_dia) > 1:
-                            atribuicao = " / ".join(codigos_do_dia)
-                            meta_val = (codigos_do_dia, resps_do_dia)
-                        elif len(codigos_do_dia) == 1:
-                            atribuicao = codigos_do_dia[0]
-                            meta_val = resps_do_dia[0]
-                        else:
-                            atribuicao = "F"
-                            meta_val = ""
-
-                        linha_trabalhador.append(atribuicao)
-                        linha_meta_trabalhador.append(meta_val)
-
-                    hrs_contrato_sem = float(st.session_state.horas_contrato_semanal.get(trabalhador, HORAS_CONTRATO_SEMANAL_PADRAO))
-                    hrs_contrato_mes = round((hrs_contrato_sem / 5.0) * dias_uteis_mes, 1)
-                    saldo_banco = round(horas_realizadas_trab - hrs_contrato_mes, 1)
-
-                    totais_horas_realizadas[trabalhador] = horas_realizadas_trab
-                    banco_horas[trabalhador] = saldo_banco
-
-                    s_banco = f"+{saldo_banco}h" if saldo_banco > 0 else f"{saldo_banco}h"
-                    
-                    linha_trabalhador.extend([
-                        f"{round(horas_realizadas_trab, 1)}h",
-                        f"{hrs_contrato_mes}h",
-                        s_banco
-                    ])
-                    linha_meta_trabalhador.extend(["", "", ""])
-                    
-                    dados_escala[trabalhador] = linha_trabalhador
-                    dados_meta_resps[trabalhador] = linha_meta_trabalhador
-
-                colunas_dias = [str(dia) for dia in range(1, num_dias + 1)]
-                todas_colunas = colunas_dias + ["Horas Realizadas", "Alvo Contratual", "Banco de Horas"]
-
-                df_resultado = pd.DataFrame.from_dict(dados_escala, orient="index", columns=todas_colunas)
-                df_meta_resps = pd.DataFrame.from_dict(dados_meta_resps, orient="index", columns=todas_colunas)
-                
-                # Opções de Exportação e Impressão
-                col_pdf, col_exp1, col_exp2 = st.columns([1, 1, 1])
-
-                # Gerar PDF limpo (Exclusivo para Impressão)
-                pdf_bytes = gerar_pdf_escala(df_resultado, df_meta_resps, mes_sel, ano_sel)
-                col_pdf.download_button(
-                    label="📄 Descarregar Escala em PDF (Pronto a Imprimir)",
-                    data=pdf_bytes,
-                    file_name=f"escala_{mes_sel}_{ano_sel}.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                    type="primary"
-                )
-
-                # Exportar Excel
-                excel_bytes = gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes_sel, ano_sel)
-                col_exp1.download_button(
-                    label="📊 Descarregar Excel (.xlsx)",
-                    data=excel_bytes,
-                    file_name=f"escala_{mes_sel}_{ano_sel}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
-
-                # Exportar CSV
-                csv = df_resultado.to_csv().encode("utf-8")
-                col_exp2.download_button(
-                    label="📥 Descarregar CSV",
-                    data=csv,
-                    file_name=f"escala_{mes_sel}_{ano_sel}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-
-                # Renderizar Legenda das Cores do Texto por Responsabilidade
-                st.markdown("### 🎨 Legenda dos Turnos por Setor")
-                legenda_html = "<div style='display:flex; gap:15px; flex-wrap:wrap; margin-bottom:15px;'>"
-                for resp, c_info in RESPONSABILIDADE_CORES.items():
-                    legenda_html += f"<span style='color:{c_info['texto']}; font-weight:bold; font-size:0.95rem; background:#f9fafb; padding:4px 10px; border-radius:6px; border:1px solid #e5e7eb;'>● {resp}</span>"
-                legenda_html += "</div>"
-                st.markdown(legenda_html, unsafe_allow_html=True)
-
-                # Renderizar Tabela HTML Padronizada
-                tabela_html = renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes_sel, ano_sel)
-                st.markdown(tabela_html, unsafe_allow_html=True)
-
-                st.subheader("📊 Resumo do Banco de Horas da Equipa")
-                cols_met = st.columns(min(len(trabalhadores), 5))
-                for idx_m, t_nome in enumerate(trabalhadores[:5]):
-                    saldo = banco_horas[t_nome]
-                    s_str = f"+{saldo}h" if saldo > 0 else f"{saldo}h"
-                    cols_met[idx_m].metric(label=t_nome, value=f"{totais_horas_realizadas[t_nome]}h", delta=s_str)
+    # Lógica de confirmação antes de gerar/substituir
+    if st.session_state.confirmar_substituicao:
+        st.warning("⚠️ Já existe uma escala gerada. Deseja substituí-la pela nova escala?")
+        col_sim, col_nao = st.columns(2)
+        if col_sim.button("✅ Sim, Gerar Nova Escala", type="primary"):
+            st.session_state.confirmar_substituicao = False
+            if executar_gerador_escala(mes_gerar, ano_gerar):
+                st.success("Nova escala gerada com sucesso!")
+                st.rerun()
+        if col_nao.button("❌ Cancelar"):
+            st.session_state.confirmar_substituicao = False
+            st.rerun()
+    else:
+        if st.button("⚡ Gerar Escala Optimizada", type="primary"):
+            if st.session_state.escala_gerada is not None:
+                st.session_state.confirmar_substituicao = True
+                st.rerun()
             else:
-                st.error("Não foi possível encontrar uma solução válida com as restrições impostas. Tente reduzir as necessidades mensais ou ajustar as folgas/férias solicitadas.")
+                if executar_gerador_escala(mes_gerar, ano_gerar):
+                    st.success("Escala gerada com sucesso!")
+                    st.rerun()
+
+    # RENDERIZAR ESCALA GUARDADA (PERSISTENTE)
+    if st.session_state.escala_gerada is not None:
+        eg = st.session_state.escala_gerada
+        df_resultado = eg["df_resultado"]
+        df_meta_resps = eg["df_meta_resps"]
+        mes_escala = eg["mes"]
+        ano_escala = eg["ano"]
+        banco_horas = eg["banco_horas"]
+        totais_horas_realizadas = eg["totais_horas_realizadas"]
+        trabalhadores_escala = eg["trabalhadores"]
+
+        st.markdown("---")
+        st.subheader(f"📋 Escala Atual: {calendar.month_name[mes_escala].capitalize()} de {ano_escala}")
+
+        # Opções de Exportação e Impressão
+        col_pdf, col_exp1, col_exp2 = st.columns([1, 1, 1])
+
+        # PDF Gerado e Prontinho a Descarregar
+        pdf_bytes = gerar_pdf_escala(df_resultado, df_meta_resps, mes_escala, ano_escala)
+        col_pdf.download_button(
+            label="📄 Descarregar Escala em PDF",
+            data=pdf_bytes,
+            file_name=f"escala_{mes_escala}_{ano_escala}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+            type="primary"
+        )
+
+        # Exportar Excel
+        excel_bytes = gerar_excel_escala_formatado(df_resultado, df_meta_resps, mes_escala, ano_escala)
+        col_exp1.download_button(
+            label="📊 Descarregar Excel (.xlsx)",
+            data=excel_bytes,
+            file_name=f"escala_{mes_escala}_{ano_escala}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
+        # Exportar CSV
+        csv = df_resultado.to_csv().encode("utf-8")
+        col_exp2.download_button(
+            label="📥 Descarregar CSV",
+            data=csv,
+            file_name=f"escala_{mes_escala}_{ano_escala}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+
+        # Renderizar Legenda das Cores do Texto por Responsabilidade
+        st.markdown("### 🎨 Legenda dos Turnos por Setor")
+        legenda_html = "<div style='display:flex; gap:15px; flex-wrap:wrap; margin-bottom:15px;'>"
+        for resp, c_info in RESPONSABILIDADE_CORES.items():
+            legenda_html += f"<span style='color:{c_info['texto']}; font-weight:bold; font-size:0.95rem; background:#f9fafb; padding:4px 10px; border-radius:6px; border:1px solid #e5e7eb;'>● {resp}</span>"
+        legenda_html += "</div>"
+        st.markdown(legenda_html, unsafe_allow_html=True)
+
+        # Renderizar Tabela HTML
+        tabela_html = renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes_escala, ano_escala)
+        st.markdown(tabela_html, unsafe_allow_html=True)
+
+        st.subheader("📊 Resumo do Banco de Horas da Equipa")
+        cols_met = st.columns(min(len(trabalhadores_escala), 5))
+        for idx_m, t_nome in enumerate(trabalhadores_escala[:5]):
+            saldo = banco_horas[t_nome]
+            s_str = f"+{saldo}h" if saldo > 0 else f"{saldo}h"
+            cols_met[idx_m].metric(label=t_nome, value=f"{totais_horas_realizadas[t_nome]}h", delta=s_str)
