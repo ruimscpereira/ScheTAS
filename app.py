@@ -2,6 +2,7 @@ import calendar
 import html
 import io
 import json
+import os
 import re
 from datetime import datetime
 
@@ -14,7 +15,7 @@ from ortools.sat.python import cp_model
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, Image as RLImage
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 
@@ -53,7 +54,7 @@ LIMITE_JORNADAS_12H_PADRAO = 31
 HORAS_CONTRATO_SEMANAL_PADRAO = 35.0
 HORAS_DIA_FERIAS_LICENCA = 7.0
 
-st.set_page_config(page_title="ScheTAS - Gestor de Escalas de Trabalho - TAS Imagiologia", layout="wide")
+st.set_page_config(page_title="Gestor de Escalas de Trabalho", layout="wide")
 
 # =============================================================================
 # PERSISTÊNCIA VIA GITHUB API POR MÊS
@@ -210,7 +211,7 @@ if "confirmar_substituicao" not in st.session_state:
 # =============================================================================
 # SELETOR GLOBAL DE MÊS E ANO NO TOPO
 # =============================================================================
-st.title("🗓️ ScheTAS - Escalas de Trabalho - TAS Imagiologia ULSRA")
+st.title("🗓️ Gestor Inteligente de Escalas de Trabalho")
 
 col_g1, col_g2, col_g3 = st.columns([2, 2, 4])
 with col_g1:
@@ -449,26 +450,38 @@ def renderizar_tabela_escala_html(df_resultado, df_meta_resps, mes, ano):
 
 
 def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
+    """Gera um PDF exclusivo com o logotipo ULSRA, cabeçalho do serviço e título formatado."""
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
         pagesize=landscape(A4),
         rightMargin=15,
         leftMargin=15,
-        topMargin=20,
-        bottomMargin=20
+        topMargin=15,
+        bottomMargin=15
     )
 
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
+    
+    style_servico = ParagraphStyle(
+        'ServicoStyle',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=11,
+        leading=14,
+        alignment=0, # Esquerda
+        textColor=colors.HexColor('#1E3A8A')
+    )
+
+    style_titulo = ParagraphStyle(
         'DocTitle',
         parent=styles['Heading1'],
         fontName='Helvetica-Bold',
-        fontSize=16,
-        leading=20,
-        alignment=1,
+        fontSize=15,
+        leading=18,
+        alignment=1, # Centro
         textColor=colors.HexColor('#111827'),
-        spaceAfter=15
+        spaceAfter=12
     )
 
     cell_header_style = ParagraphStyle('CellHeader', fontName='Helvetica-Bold', fontSize=7, leading=9, alignment=1, textColor=colors.HexColor('#374151'))
@@ -477,10 +490,42 @@ def gerar_pdf_escala(df_resultado, df_meta_resps, mes, ano):
     cell_trab_style = ParagraphStyle('CellTrab', fontName='Helvetica-Bold', fontSize=7, leading=9, alignment=0, textColor=colors.HexColor('#111827'))
 
     elements = []
-    nome_mes = calendar.month_name[mes].capitalize()
-    elements.append(Paragraph(f"Escala de Trabalho Mensal - {nome_mes} de {ano}", title_style))
-    elements.append(Spacer(1, 5))
 
+    # 1. CONSTRUÇÃO DO CABEÇALHO (Serviço à Esquerda, Logótipo à Direita)
+    p_servico = Paragraph("<b>ULS Região de Aveiro</b><br/><font size=9 color='#4B5563'>Serviço de Imagiologia</font>", style_servico)
+    
+    logo_path = "logo_ulsra.png"
+    if not os.path.exists(logo_path):
+        for alt_ext in ["logo_ulsra.jpg", "logo_ulsra.jpeg", "logo.png", "logo.jpg"]:
+            if os.path.exists(alt_ext):
+                logo_path = alt_ext
+                break
+
+    if os.path.exists(logo_path):
+        img_logo = RLImage(logo_path, width=130, height=38)
+    else:
+        img_logo = Paragraph("<font size=8 color='#9CA3AF'>[Logótipo ULSRA]</font>", style_servico)
+
+    header_table_data = [[p_servico, img_logo]]
+    header_table = Table(header_table_data, colWidths=[500, 312])
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    
+    elements.append(header_table)
+    elements.append(Spacer(1, 4))
+
+    # 2. TÍTULO ATUALIZADO
+    nome_mes = calendar.month_name[mes].capitalize()
+    elements.append(Paragraph(f"Escala de Trabalho Mensal - TAS - {nome_mes} {ano}", style_titulo))
+    elements.append(Spacer(1, 4))
+
+    # 3. MATRIZ DA TABELA DA ESCALA
     headers = ["Trabalhador"] + list(df_resultado.columns)
     table_data = []
 
@@ -1240,7 +1285,7 @@ with tabs[4]:
         trabalhadores_escala = escala_existente["trabalhadores"]
 
         st.markdown("---")
-        st.subheader(f"📋 Escala de {calendar.month_name[mes_sel].capitalize()} de {ano_sel}")
+        st.subheader(f"📋 Escala de Trabalho Mensal - TAS - {calendar.month_name[mes_sel].capitalize()} {ano_sel}")
 
         col_pdf, col_exp1, col_exp2 = st.columns([1, 1, 1])
 
